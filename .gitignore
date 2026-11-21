@@ -32,3 +32,9 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Build output
+/bin/
+
+# M0 measurement runs (summaries go in docs/m0-meshtastic-spike.md)
+*.jsonl
