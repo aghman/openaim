@@ -256,8 +256,8 @@ Reachability is **not** derived from transport metadata. It's only updated from 
 - **LAN:** mDNS advertises only in Nearby mode (opt-in). Otherwise, buddies on the same LAN find each other through the same rendezvous records, which list LAN addresses.
 - **Relays:**
   - **The problem:** go-libp2p's circuit relay v2 defaults reset a relayed connection after **2 minutes or 128 KiB**, and DCUtR hole punching succeeds only about 70% of the time. The two-buddies-behind-symmetric-NAT case therefore *will* run over relays.
-  - **Our own relays:** `openaimd --public` relays run with raised limits for OpenAIM protocols. Relays are told only rotating peer IDs.
-  - **Limited connections:** the presence and message protocols explicitly allow limited (relayed) connections.
+  - **Our own relays:** `openaimd --public` relays run with raised limits (M0 starting point: 1 hour / 16 MiB per direction). Relay v2 limits apply per relayed connection, and the relay can't see which protocols run inside the encrypted circuit. So "raised limits for OpenAIM" means raised for every peer the relay accepts a reservation from, and any restriction to OpenAIM users has to be at reservation time. Relays are told only rotating peer IDs.
+  - **Limited connections:** when a relay sets limits, the relayed connection is marked *limited*, and the presence and message protocols open streams on it with explicit permission. Without that permission, a stream waits for a direct (hole-punched) connection.
   - **Flapping:** reconnects are transparent. The "door close" grace period (default 3 minutes) exceeds the relay reset interval, so a reset doesn't show as signing off.
   - Measured in M0.
 - **Protocols:**
