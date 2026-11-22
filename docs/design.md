@@ -249,9 +249,9 @@ Reachability is **not** derived from transport metadata. It's only updated from 
 
 - **Network identity:** a random libp2p host key, rotated daily and on restart. Your current peer ID is sent to buddies only inside encrypted presence and reachability messages.
 - **Finding buddies (rendezvous):** a private Kademlia DHT (`/openaim/kad/1.0.0`). For each buddy and each day you store a record:
-  - The record's **key** is `R = HMAC(K_dir, "rdv" ‖ day)`, which only you and that buddy can compute.
-  - Its **value** is your current peer ID and addresses, encrypted under a matching locator key `L = HKDF(K_dir, "loc" ‖ day)`.
-  - DHT nodes see an unlinkable key and ciphertext. With 100 buddies that's 100 small record writes a day.
+  - `R = HMAC(K_dir, "rdv" ‖ day)`, which only you and that buddy can compute, is the **seed of an Ed25519 signing key**. The record's DHT key is a hash of that key's public half, and the record is signed with it. So DHT nodes can't overwrite a record with junk: only the pair can write it ([spec/dht-records.md](../spec/dht-records.md)).
+  - Its **payload** is your current peer ID and addresses, encrypted under a matching locator key `L = HKDF(K_dir, "loc" ‖ day)`.
+  - DHT nodes see an unlinkable key, a signature and ciphertext. With 100 buddies that's 100 small record writes a day.
 - **Coming online:** the later-arriving side looks up each buddy's rendezvous record and dials them. Both sides exchange presence over `/openaim/msg/1`, and the buddy sees "door open".
 - **LAN:** mDNS advertises only in Nearby mode (opt-in). Otherwise, buddies on the same LAN find each other through the same rendezvous records, which list LAN addresses.
 - **Relays:**
