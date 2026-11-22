@@ -93,7 +93,9 @@ type DaemonClient interface {
 	// RESOURCE_EXHAUSTED and should resubscribe and reload. The stream ends with
 	// UNAVAILABLE when the daemon shuts down.
 	SubscribeEvents(ctx context.Context, in *SubscribeEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Event], error)
-	// An encrypted backup file (spec/backup.md): identity seed and buddy list.
+	// An encrypted backup file (spec/backup.md): identity seed and buddy list,
+	// and the recovery seed when an earlier backup that holds it is passed in
+	// (the daemon never keeps the recovery seed; see ExportBackupRequest).
 	ExportBackup(ctx context.Context, in *ExportBackupRequest, opts ...grpc.CallOption) (*ExportBackupResponse, error)
 	// Stops the daemon gracefully. It replies first, then stops.
 	Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*ShutdownResponse, error)
@@ -282,7 +284,9 @@ type DaemonServer interface {
 	// RESOURCE_EXHAUSTED and should resubscribe and reload. The stream ends with
 	// UNAVAILABLE when the daemon shuts down.
 	SubscribeEvents(*SubscribeEventsRequest, grpc.ServerStreamingServer[Event]) error
-	// An encrypted backup file (spec/backup.md): identity seed and buddy list.
+	// An encrypted backup file (spec/backup.md): identity seed and buddy list,
+	// and the recovery seed when an earlier backup that holds it is passed in
+	// (the daemon never keeps the recovery seed; see ExportBackupRequest).
 	ExportBackup(context.Context, *ExportBackupRequest) (*ExportBackupResponse, error)
 	// Stops the daemon gracefully. It replies first, then stops.
 	Shutdown(context.Context, *ShutdownRequest) (*ShutdownResponse, error)

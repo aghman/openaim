@@ -2,7 +2,9 @@
 // the buddy list, the message store and (later) the transports, and serves
 // the local client API that the CLI, TUI and GUI use.
 //
-//	openaimd init [--restore]   create an identity (or restore one from its phrase)
+//	openaimd init --backup FILE create an identity and its recovery key (kept only in FILE)
+//	openaimd init --restore     restore an identity from its phrase (no recovery key)
+//	openaimd init --restore-backup FILE   restore an identity and its recovery key
 //	openaimd [run]              unlock the identity and serve the API
 //	openaimd version
 package main
@@ -37,7 +39,10 @@ const EnvPassphrase = "OPENAIM_PASSPHRASE"
 const usage = `openaimd: the OpenAIM daemon
 
 Usage:
-  openaimd init [--restore] [flags]   create an identity, or restore one from its recovery phrase
+  openaimd init --backup FILE [flags] create an identity; FILE gets the first backup,
+                                      the only copy of its recovery key
+  openaimd init --restore [flags]     restore an identity from its recovery phrase
+  openaimd init --restore-backup FILE restore an identity from a backup file
   openaimd [run] [flags]              unlock the identity and serve the local API
   openaimd version                    print the version
 
@@ -196,15 +201,31 @@ func (c *common) logger(e env) (*slog.Logger, error) {
 // passphrase gets the keystore passphrase from the file, the environment or
 // the terminal, in that order. confirm asks twice on a terminal.
 func (c *common) passphrase(e env, confirm bool) ([]byte, error) {
-	if c.passphraseFile != "" {
-		fi, err := os.Stat(c.passphraseFile)
+	return readPassphrase(e, secretSource{
+		file: c.passphraseFile, fileFlag: "--passphrase-file", env: EnvPassphrase, what: "Keystore passphrase",
+	}, confirm)
+}
+
+// secretSource names where one passphrase may come from.
+type secretSource struct {
+	file     string // the flag's value
+	fileFlag string // e.g. "--passphrase-file"
+	env      string // environment variable
+	what     string // prompt, e.g. "Keystore passphrase"
+}
+
+// readPassphrase reads a passphrase from the file, the environment or the
+// terminal, in that order. confirm asks twice on a terminal.
+func readPassphrase(e env, src secretSource, confirm bool) ([]byte, error) {
+	if src.file != "" {
+		fi, err := os.Stat(src.file)
 		if err != nil {
 			return nil, fmt.Errorf("passphrase file: %w", err)
 		}
 		if fi.Mode().Perm()&0o077 != 0 {
-			fmt.Fprintf(e.stderr, "openaimd: warning: %s is readable by other users (mode %04o)\n", c.passphraseFile, fi.Mode().Perm())
+			fmt.Fprintf(e.stderr, "openaimd: warning: %s is readable by other users (mode %04o)\n", src.file, fi.Mode().Perm())
 		}
-		b, err := os.ReadFile(c.passphraseFile)
+		b, err := os.ReadFile(src.file)
 		if err != nil {
 			return nil, fmt.Errorf("passphrase file: %w", err)
 		}
@@ -214,13 +235,13 @@ func (c *common) passphrase(e env, confirm bool) ([]byte, error) {
 		}
 		return b, nil
 	}
-	if p := e.getenv(EnvPassphrase); p != "" {
+	if p := e.getenv(src.env); p != "" {
 		return []byte(p), nil
 	}
 	if e.readSecret == nil {
-		return nil, fmt.Errorf("no passphrase: use --passphrase-file or $%s when not on a terminal", EnvPassphrase)
+		return nil, fmt.Errorf("no %s: use %s or $%s when not on a terminal", strings.ToLower(src.what), src.fileFlag, src.env)
 	}
-	p, err := e.readSecret("Keystore passphrase: ")
+	p, err := e.readSecret(src.what + ": ")
 	if err != nil {
 		return nil, err
 	}
@@ -283,28 +304,100 @@ func runDaemon(ctx context.Context, args []string, e env) error {
 	return err
 }
 
+// EnvBackupPassphrase supplies the backup passphrase non-interactively (the
+// same variable `openaim backup export` reads).
+const EnvBackupPassphrase = "OPENAIM_BACKUP_PASSPHRASE"
+
+// maxBackupFile bounds a backup file read for --restore-backup.
+const maxBackupFile = keystore.MaxPlaintext + 1024
+
+const initHelp = `Usage: openaimd init --backup FILE [flags]
+       openaimd init --no-recovery-key [flags]
+       openaimd init --restore [flags]               (phrase on stdin or the terminal)
+       openaimd init --restore-backup FILE [flags]
+
+A new identity gets a recovery key (design §5.5): a second key, used only to
+sign a key rotation if this device is ever lost or stolen. Its secret is kept
+ONLY in an encrypted backup file, never in the keystore, the keychain or the
+database, so a stolen device can't use it. init therefore writes that first
+backup to --backup FILE, under a backup passphrase (--backup-passphrase-file,
+else $OPENAIM_BACKUP_PASSPHRASE, else a terminal prompt). Move the file off
+this device. Later backups (openaim backup export --from FILE) carry the
+recovery key over only from a backup that has it: lose every copy and the
+identity can never rotate. --no-recovery-key skips all this.
+
+--restore takes the 24-word phrase, which restores the identity key only: the
+phrase doesn't encode the recovery key, so the restored identity has none.
+--restore-backup restores the identity, its recovery key and the buddy list
+from a backup file instead (the file keeps the recovery seed; nothing new is
+written).
+
+Flags:
+`
+
 func runInit(ctx context.Context, args []string, e env) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
+	fs.Usage = func() {
+		fmt.Fprint(fs.Output(), initHelp)
+		fs.PrintDefaults()
+	}
 	var c common
 	c.register(fs)
 	fs.StringVar(&c.keystore, "keystore", string(daemon.KeystoreModeFile), keystoreHelp)
-	restore := fs.Bool("restore", false, "restore an identity from its 24-word recovery phrase (read from stdin)")
+	restore := fs.Bool("restore", false, "restore an identity from its 24-word recovery phrase (read from stdin); it gets no recovery key")
+	restoreBackup := fs.String("restore-backup", "", "restore the identity, recovery key and buddy list from this backup file")
+	backupOut := fs.String("backup", "", "write the first backup, which alone holds the recovery key, to this new file (required for a new identity unless --no-recovery-key)")
+	backupPassFile := fs.String("backup-passphrase-file", "", "read the backup passphrase from this file")
+	noRecovery := fs.Bool("no-recovery-key", false, "create the identity without a recovery key (it can never sign a key rotation)")
 	if err := parse(fs, args, e); err != nil {
 		return err
+	}
+	switch {
+	case *restore && *restoreBackup != "":
+		fmt.Fprintln(e.stderr, "openaimd init: give --restore or --restore-backup, not both")
+		return errUsage
+	case (*restore || *restoreBackup != "") && (*backupOut != "" || *noRecovery):
+		fmt.Fprintln(e.stderr, "openaimd init: a restore makes no recovery key: drop --backup and --no-recovery-key")
+		return errUsage
+	case *backupOut != "" && *noRecovery:
+		fmt.Fprintln(e.stderr, "openaimd init: give --backup or --no-recovery-key, not both")
+		return errUsage
+	case !*restore && *restoreBackup == "" && *backupOut == "" && !*noRecovery:
+		return errors.New("init needs --backup FILE: the new identity's recovery key is kept only in that encrypted " +
+			"backup file (keep it off this device), or --no-recovery-key to go without one (see openaimd init -h)")
 	}
 	dir, err := c.resolveDataDir(e)
 	if err != nil {
 		return err
 	}
-	var phrase string
-	if *restore {
-		if phrase, err = readPhrase(e); err != nil {
+	backupSrc := secretSource{file: *backupPassFile, fileFlag: "--backup-passphrase-file", env: EnvBackupPassphrase, what: "Backup passphrase"}
+	cfg := daemon.InitConfig{DataDir: dir, KeystoreParams: keystoreParams}
+	switch {
+	case *restore:
+		if cfg.Phrase, err = readPhrase(e); err != nil {
 			return err
 		}
 		// Check it before asking for a passphrase.
-		if _, err := identity.ParsePhrase(phrase); err != nil {
+		if _, err := identity.ParsePhrase(cfg.Phrase); err != nil {
 			return err
 		}
+	case *restoreBackup != "":
+		blob, err := readBackupFile(*restoreBackup)
+		if err != nil {
+			return err
+		}
+		pass, err := readPassphrase(e, backupSrc, false)
+		if err != nil {
+			return err
+		}
+		if cfg.FromBackup, err = keystore.DecodeBackup(blob, pass); err != nil {
+			return fmt.Errorf("backup %s: %w", *restoreBackup, err)
+		}
+	case *backupOut != "":
+		if _, err := os.Lstat(*backupOut); err == nil {
+			return fmt.Errorf("%s exists; give a new file for the backup", *backupOut)
+		}
+		cfg.BackupPath = *backupOut
 	}
 	mode, err := c.keystoreMode()
 	if err != nil {
@@ -313,7 +406,7 @@ func runInit(ctx context.Context, args []string, e env) error {
 	if mode, err = daemon.ResolveKeystoreMode(mode); err != nil {
 		return err
 	}
-	cfg := daemon.InitConfig{DataDir: dir, Keystore: mode, Phrase: phrase, KeystoreParams: keystoreParams}
+	cfg.Keystore = mode
 	where := "OS keychain (no passphrase; readable by programs running as you)"
 	if mode == daemon.KeystoreModeFile {
 		if cfg.Passphrase, err = c.passphrase(e, true); err != nil {
@@ -321,18 +414,64 @@ func runInit(ctx context.Context, args []string, e env) error {
 		}
 		where = "passphrase-encrypted file " + daemon.PathsFor(dir).Keystore
 	}
-	id, err := daemon.Init(ctx, cfg)
+	if cfg.BackupPath != "" {
+		if cfg.BackupPassphrase, err = readPassphrase(e, backupSrc, true); err != nil {
+			return err
+		}
+		if bytes.Equal(cfg.BackupPassphrase, cfg.Passphrase) {
+			fmt.Fprintln(e.stderr, "openaimd: warning: the backup passphrase is the keystore passphrase; "+
+				"anyone who learns it and finds the backup can rotate your key")
+		}
+	}
+	res, err := daemon.InitIdentity(ctx, cfg)
 	if err != nil {
 		return err
 	}
+	id := res.Identity
 	pub := id.Public()
-	if *restore {
-		fmt.Fprintf(e.stdout, "Restored identity %s\n  key: %s\n  data dir: %s\n  keystore: %s\n", pub.KeyID(), pub, dir, where)
-		return nil
+	verb := "Created"
+	if *restore || *restoreBackup != "" {
+		verb = "Restored"
 	}
-	fmt.Fprintf(e.stdout, "Created identity %s\n  key: %s\n  data dir: %s\n  keystore: %s\n\n", pub.KeyID(), pub, dir, where)
-	printPhrase(e.stdout, id.Phrase())
+	bw := bufio.NewWriter(e.stdout)
+	fmt.Fprintf(bw, "%s identity %s\n  key: %s\n  data dir: %s\n  keystore: %s\n", verb, pub.KeyID(), pub, dir, where)
+	if res.RecoveryKey != nil {
+		fmt.Fprintf(bw, "  recovery key: %s (%s)\n", res.RecoveryKey, res.RecoveryKey.KeyID())
+	} else {
+		fmt.Fprintln(bw, "  recovery key: none (this identity can't sign a key rotation)")
+	}
+	if *restoreBackup != "" {
+		fmt.Fprintf(bw, "  buddies restored: %d\n", res.Buddies)
+	}
+	if res.BackupPath != "" {
+		fmt.Fprintf(bw, "  backup: %s\n\n", res.BackupPath)
+		fmt.Fprintln(bw, "The backup file is the ONLY copy of the recovery key. Move it off this device")
+		fmt.Fprintln(bw, "and keep it with its passphrase. Later backups keep the recovery key only if")
+		fmt.Fprintln(bw, "made from this one: openaim backup export --from FILE.")
+	}
+	bw.Flush()
+	if verb == "Created" {
+		fmt.Fprintln(e.stdout)
+		printPhrase(e.stdout, id.Phrase())
+	}
 	return nil
+}
+
+// readBackupFile reads a backup file, refusing anything too large to be one.
+func readBackupFile(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("backup: %w", err)
+	}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, maxBackupFile+1))
+	if err != nil {
+		return nil, fmt.Errorf("backup: %w", err)
+	}
+	if len(b) > maxBackupFile {
+		return nil, fmt.Errorf("backup: %s is too large to be a backup file", path)
+	}
+	return b, nil
 }
 
 // readPhrase reads the recovery phrase: one line from a terminal (echo off,

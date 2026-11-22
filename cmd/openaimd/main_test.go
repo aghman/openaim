@@ -45,7 +45,8 @@ func runCmd(ctx context.Context, stdin string, vars map[string]string, args ...s
 
 var (
 	wordRE = regexp.MustCompile(`\d+\. (\S+)`)
-	keyRE  = regexp.MustCompile(`key: (\S+)`)
+	keyRE  = regexp.MustCompile(`\n  key: (\S+)`)
+	recRE  = regexp.MustCompile(`recovery key: ([a-z2-7]{52}) `)
 )
 
 func TestInitRestoreRun(t *testing.T) {
@@ -56,10 +57,20 @@ func TestInitRestoreRun(t *testing.T) {
 	}
 
 	dir := filepath.Join(shortDir(t), "a")
-	r := runCmd(ctx, "", nil, "init", "--data-dir", dir, "--passphrase-file", passFile)
+	// A new identity needs somewhere for its recovery key.
+	if r := runCmd(ctx, "", nil, "init", "--data-dir", dir, "--passphrase-file", passFile); r.code != 1 || !strings.Contains(r.stderr, "--backup") {
+		t.Fatalf("init without --backup: %+v", r)
+	}
+	backup := filepath.Join(shortDir(t), "first.oaimbak")
+	bvars := map[string]string{EnvBackupPassphrase: "backup pass"}
+	r := runCmd(ctx, "", bvars, "init", "--data-dir", dir, "--passphrase-file", passFile, "--backup", backup)
 	if r.code != 0 {
 		t.Fatalf("init: %d %s", r.code, r.stderr)
 	}
+	if !strings.Contains(r.stdout, "backup: "+backup) || !strings.Contains(r.stdout, "ONLY copy of the recovery key") {
+		t.Fatalf("no backup notice:\n%s", r.stdout)
+	}
+	rkey := recRE.FindStringSubmatch(r.stdout)[1]
 	if !strings.Contains(r.stdout, "RECOVERY PHRASE") {
 		t.Fatalf("no phrase warning:\n%s", r.stdout)
 	}
@@ -72,9 +83,35 @@ func TestInitRestoreRun(t *testing.T) {
 	}
 	key := keyRE.FindStringSubmatch(r.stdout)[1]
 
-	// Init again is refused.
-	if r := runCmd(ctx, "", nil, "init", "--data-dir", dir, "--passphrase-file", passFile); r.code != 1 {
+	blob, err := os.ReadFile(backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bk, err := keystore.DecodeBackup(blob, []byte("backup pass"))
+	if err != nil || bk.Recovery == nil || bk.Recovery.Public().String() != rkey || bk.Identity.Public().String() != key {
+		t.Fatalf("backup %+v %v", bk, err)
+	}
+
+	// Init again is refused, and an existing backup file is never replaced.
+	if r := runCmd(ctx, "", bvars, "init", "--data-dir", dir, "--passphrase-file", passFile, "--no-recovery-key"); r.code != 1 {
 		t.Fatalf("second init: %d", r.code)
+	}
+	if r := runCmd(ctx, "", bvars, "init", "--data-dir", shortDir(t), "--passphrase-file", passFile, "--backup", backup); r.code != 1 || !strings.Contains(r.stderr, "exists") {
+		t.Fatalf("init over an existing backup: %+v", r)
+	}
+	if r := runCmd(ctx, "", bvars, "init", "--restore", "--backup", backup); r.code != 2 {
+		t.Fatalf("restore with --backup: %+v", r)
+	}
+
+	// Restoring from the backup brings back the recovery key.
+	dir3 := filepath.Join(shortDir(t), "c")
+	r = runCmd(ctx, "", bvars, "init", "--data-dir", dir3, "--passphrase-file", passFile, "--restore-backup", backup)
+	if r.code != 0 || keyRE.FindStringSubmatch(r.stdout)[1] != key || recRE.FindStringSubmatch(r.stdout)[1] != rkey ||
+		strings.Contains(r.stdout, "RECOVERY PHRASE") {
+		t.Fatalf("restore from backup: %+v", r)
+	}
+	if r := runCmd(ctx, "", map[string]string{EnvBackupPassphrase: "wrong"}, "init", "--data-dir", shortDir(t), "--passphrase-file", passFile, "--restore-backup", backup); r.code != 1 {
+		t.Fatalf("restore with the wrong backup passphrase: %+v", r)
 	}
 
 	// Restore from the phrase on stdin, passphrase from the environment.
@@ -89,6 +126,9 @@ func TestInitRestoreRun(t *testing.T) {
 	}
 	if strings.Contains(r.stdout, "RECOVERY PHRASE") {
 		t.Fatal("restore printed the phrase again")
+	}
+	if !strings.Contains(r.stdout, "recovery key: none") {
+		t.Fatalf("phrase restore claims a recovery key:\n%s", r.stdout)
 	}
 	if r := runCmd(ctx, "abandon abandon\n", vars, "init", "--restore", "--data-dir", shortDir(t)); r.code != 1 {
 		t.Fatalf("bad phrase: %d", r.code)
@@ -155,11 +195,11 @@ func TestKeychainInitRun(t *testing.T) {
 	ctx := context.Background()
 	dir := filepath.Join(shortDir(t), "k")
 
-	if r := runCmd(ctx, "", nil, "init", "--data-dir", dir, "--keystore", "vault"); r.code != 1 || !strings.Contains(r.stderr, "--keystore") {
+	if r := runCmd(ctx, "", nil, "init", "--data-dir", dir, "--keystore", "vault", "--no-recovery-key"); r.code != 1 || !strings.Contains(r.stderr, "--keystore") {
 		t.Fatalf("bad mode: %+v", r)
 	}
 	// No passphrase source at all: the keychain doesn't need one.
-	r := runCmd(ctx, "", nil, "init", "--data-dir", dir, "--keystore", "keychain")
+	r := runCmd(ctx, "", nil, "init", "--data-dir", dir, "--keystore", "keychain", "--no-recovery-key")
 	if r.code != 0 || !strings.Contains(r.stdout, "keystore: OS keychain") {
 		t.Fatalf("keychain init: %+v", r)
 	}
@@ -206,7 +246,7 @@ func TestKeychainInitRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir2 := filepath.Join(shortDir(t), "f")
-	if r := runCmd(ctx, "", nil, "init", "--data-dir", dir2, "--passphrase-file", passFile); r.code != 0 || !strings.Contains(r.stdout, "keystore: passphrase-encrypted file") {
+	if r := runCmd(ctx, "", nil, "init", "--data-dir", dir2, "--passphrase-file", passFile, "--no-recovery-key"); r.code != 0 || !strings.Contains(r.stdout, "keystore: passphrase-encrypted file") {
 		t.Fatalf("file init: %+v", r)
 	}
 	if r := runCmd(ctx, "", nil, "run", "--data-dir", dir2, "--keystore", "keychain"); r.code != 1 || !strings.Contains(r.stderr, "keystore") {

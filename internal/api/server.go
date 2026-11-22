@@ -43,7 +43,8 @@ func (s *server) rpcError(method string, err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, daemon.ErrDuplicate):
 		return status.Error(codes.AlreadyExists, err.Error())
-	case errors.Is(err, daemon.ErrBlocked), errors.Is(err, daemon.ErrNoHandle), errors.Is(err, daemon.ErrHandleUnverified):
+	case errors.Is(err, daemon.ErrBlocked), errors.Is(err, daemon.ErrNoHandle), errors.Is(err, daemon.ErrHandleUnverified),
+		errors.Is(err, daemon.ErrBackupMismatch):
 		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, daemon.ErrHandleUnreachable):
 		return status.Error(codes.Unavailable, err.Error())
@@ -59,7 +60,12 @@ func (s *server) GetStatus(ctx context.Context, _ *pb.GetStatusRequest) (*pb.Sta
 	if err != nil {
 		return nil, s.rpcError("GetStatus", err)
 	}
+	var rk string
+	if k := s.n.RecoveryKey(); k != nil {
+		rk = k.String()
+	}
 	return &pb.Status{
+		RecoveryKey: rk,
 		IdentityKey: st.Identity.String(),
 		KeyId:       st.Identity.KeyID(),
 		Version:     daemon.BuildVersion(),
@@ -218,15 +224,21 @@ func (s *server) SubscribeEvents(_ *pb.SubscribeEventsRequest, stream grpc.Serve
 }
 
 func (s *server) ExportBackup(ctx context.Context, req *pb.ExportBackupRequest) (*pb.ExportBackupResponse, error) {
-	blob, err := s.n.ExportBackup(ctx, req.GetPassphrase())
+	b, err := s.n.ExportBackupWith(ctx, daemon.ExportBackupOptions{
+		Passphrase: req.GetPassphrase(), Previous: req.GetPreviousBackup(), PreviousPassphrase: req.GetPreviousPassphrase(),
+	})
 	if err != nil {
 		return nil, s.rpcError("ExportBackup", err)
 	}
-	out := &pb.ExportBackupResponse{Backup: blob}
+	out := &pb.ExportBackupResponse{Backup: b.Blob, IncludesRecoveryKey: b.IncludesRecovery}
+	if b.RecoveryKey != nil {
+		out.RecoveryKey = b.RecoveryKey.String()
+	}
 	if req.GetIncludeRecoveryPhrase() {
 		out.RecoveryPhrase = s.n.RecoveryPhrase()
 	}
-	s.log.Info("backup exported", "bytes", len(blob), "with_phrase", req.GetIncludeRecoveryPhrase())
+	s.log.Info("backup exported", "bytes", len(b.Blob), "with_phrase", req.GetIncludeRecoveryPhrase(),
+		"with_recovery_key", b.IncludesRecovery)
 	return out, nil
 }
 

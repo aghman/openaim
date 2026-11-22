@@ -11,6 +11,7 @@ There are two kinds of file:
 | **Keystore** | `OAIMKEY1` | identity seed only | the daemon's data directory, unless the OS keychain is used (§3.1) |
 
 The recovery seed is kept **only** in the backup, never in the keystore, so a stolen device can't sign a key rotation (design §5.5).
+§5 says how it gets there: `openaimd init` writes the first backup, and the daemon keeps only the public key.
 
 ## 1. Envelope
 
@@ -85,3 +86,47 @@ example, a Linux server with no D-Bus session), the daemon falls back to the fil
   (wire.md §4.6), so after a compromise they'd have to re-add every buddy. Options: show a second phrase for the recovery seed at
   setup, or have the daemon warn while no backup has been exported since the recovery key was made. Deriving the recovery seed from
   the identity seed isn't one: anyone who stole the identity key could then rotate.
+- **Re-exporting the recovery seed.** The daemon can't put the recovery seed into a new backup by itself (§5), so the user has to
+  supply the old file. A daemon that remembered "a backup with the recovery seed exists" could nag when every export since lacks it.
+
+## 5. The recovery key at setup
+
+The recovery key (wire.md §4.6) is made by `openaimd init`, and its seed is never held by the daemon afterwards. This section says
+how, and where each half lives.
+
+| | Where | Written by |
+|---|---|---|
+| recovery **seed** | backup files only | `openaimd init --backup FILE`; `openaim backup export --from OLD` copies it from `OLD` |
+| recovery **public key** | the database's `meta` table, key `recovery_key` (32 bytes) | init, or a restore from a backup |
+
+**A new identity** (`openaimd init --backup FILE`):
+
+1. The daemon generates the identity and the recovery key, and checks the pinning rule (wire.md §4.6) on them.
+2. Before anything else is saved, it writes the first backup to `FILE`, under a backup passphrase the user gives
+   (`--backup-passphrase-file`, `$OPENAIM_BACKUP_PASSPHRASE` or a prompt). It holds both seeds and no buddies. `FILE` must not
+   exist, and is written with mode 0600 through a synced temporary file linked into place, so nothing is ever overwritten.
+3. Only then are the keystore and the database written. The database gets the recovery **public** key. If init fails before the
+   keystore holds the identity seed, it deletes the backup, which would name an identity that was never set up.
+4. The seed is dropped from memory. The keystore, the OS keychain and the database never see it.
+
+The user is told the file is the only copy of the recovery key and to move it off the device. A backup that stays on the device
+next to the keystore protects less: whoever steals the device and learns the backup passphrase can rotate. init warns when the
+backup and keystore passphrases are the same.
+
+**Without a backup.** `--no-recovery-key` creates an identity with none. Library callers of `daemon.Init` that pass no backup path
+get the same. Requests and accepts from such an identity carry no recovery key, and it can never sign a rotation.
+
+**Restoring.**
+- **From the phrase** (`init --restore`): the phrase encodes the identity seed only, so the restored identity has no recovery key.
+  Init doesn't make a new one: buddies who pinned the old key would reject rotations signed by a new one, and the old key may still
+  be in a backup file the user finds later. If the database already recorded a recovery public key (the keystore alone was lost),
+  it is kept.
+- **From a backup file** (`init --restore-backup FILE`): restores the identity seed, records the backup's recovery public key and
+  adds its buddies. The seed stays in `FILE`; nothing new is written.
+- **Adopting later.** A phrase-restored identity gets its recovery key back when an `ExportBackup` is given an earlier backup of the
+  same identity that has one (below): its public key is recorded from then on.
+
+**Later backups.** `ExportBackup` (`openaim backup export`) writes the identity seed and the buddy list. It includes the recovery
+seed only when given an earlier backup that has it (`--from OLD`; the API's `previous_backup`). That backup must be the same
+identity's, and its recovery key must be the recorded one, or the export fails. The reply says whether the recovery seed is in the
+new file, and the CLI warns when it isn't.

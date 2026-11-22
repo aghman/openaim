@@ -356,8 +356,12 @@ type Status struct {
 	Presence       *Presence              `protobuf:"bytes,7,opt,name=presence,proto3" json:"presence,omitempty"`
 	QueuedMessages uint32                 `protobuf:"varint,8,opt,name=queued_messages,json=queuedMessages,proto3" json:"queued_messages,omitempty"` // sealed messages not yet acked, all buddies
 	DataDir        string                 `protobuf:"bytes,9,opt,name=data_dir,json=dataDir,proto3" json:"data_dir,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Our recovery public key (base32), which buddy requests and accepts
+	// carry so buddies can pin it (spec/wire.md §4.6). Empty if this identity
+	// has none: it was restored from its phrase, or made without a backup.
+	RecoveryKey   string `protobuf:"bytes,10,opt,name=recovery_key,json=recoveryKey,proto3" json:"recovery_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Status) Reset() {
@@ -449,6 +453,13 @@ func (x *Status) GetQueuedMessages() uint32 {
 func (x *Status) GetDataDir() string {
 	if x != nil {
 		return x.DataDir
+	}
+	return ""
+}
+
+func (x *Status) GetRecoveryKey() string {
+	if x != nil {
+		return x.RecoveryKey
 	}
 	return ""
 }
@@ -1897,8 +1908,16 @@ type ExportBackupRequest struct {
 	// Also return the 24-word recovery phrase, so the caller can show it
 	// alongside the file (`openaim backup export`).
 	IncludeRecoveryPhrase bool `protobuf:"varint,2,opt,name=include_recovery_phrase,json=includeRecoveryPhrase,proto3" json:"include_recovery_phrase,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// An earlier backup file of this identity (OAIMBAK1). The recovery seed
+	// lives only in backups, never in the daemon (spec/backup.md §5), so a new
+	// backup holds it only if it is carried over from one that does. It must
+	// be this identity's, with the recorded recovery key: otherwise
+	// FAILED_PRECONDITION. A wrong passphrase is INVALID_ARGUMENT.
+	PreviousBackup []byte `protobuf:"bytes,3,opt,name=previous_backup,json=previousBackup,proto3" json:"previous_backup,omitempty"`
+	// Opens previous_backup; empty means `passphrase`.
+	PreviousPassphrase []byte `protobuf:"bytes,4,opt,name=previous_passphrase,json=previousPassphrase,proto3" json:"previous_passphrase,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ExportBackupRequest) Reset() {
@@ -1945,12 +1964,31 @@ func (x *ExportBackupRequest) GetIncludeRecoveryPhrase() bool {
 	return false
 }
 
+func (x *ExportBackupRequest) GetPreviousBackup() []byte {
+	if x != nil {
+		return x.PreviousBackup
+	}
+	return nil
+}
+
+func (x *ExportBackupRequest) GetPreviousPassphrase() []byte {
+	if x != nil {
+		return x.PreviousPassphrase
+	}
+	return nil
+}
+
 type ExportBackupResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Backup         []byte                 `protobuf:"bytes,1,opt,name=backup,proto3" json:"backup,omitempty"` // an OAIMBAK1 file
 	RecoveryPhrase string                 `protobuf:"bytes,2,opt,name=recovery_phrase,json=recoveryPhrase,proto3" json:"recovery_phrase,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Whether `backup` holds the recovery seed. When it doesn't but
+	// recovery_key is set, keep the backup that does: without it the
+	// identity can never sign a key rotation.
+	IncludesRecoveryKey bool   `protobuf:"varint,3,opt,name=includes_recovery_key,json=includesRecoveryKey,proto3" json:"includes_recovery_key,omitempty"`
+	RecoveryKey         string `protobuf:"bytes,4,opt,name=recovery_key,json=recoveryKey,proto3" json:"recovery_key,omitempty"` // our recovery public key (base32), or empty
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ExportBackupResponse) Reset() {
@@ -1993,6 +2031,20 @@ func (x *ExportBackupResponse) GetBackup() []byte {
 func (x *ExportBackupResponse) GetRecoveryPhrase() string {
 	if x != nil {
 		return x.RecoveryPhrase
+	}
+	return ""
+}
+
+func (x *ExportBackupResponse) GetIncludesRecoveryKey() bool {
+	if x != nil {
+		return x.IncludesRecoveryKey
+	}
+	return false
+}
+
+func (x *ExportBackupResponse) GetRecoveryKey() string {
+	if x != nil {
+		return x.RecoveryKey
 	}
 	return ""
 }
@@ -2074,7 +2126,7 @@ var File_openaim_api_v1_api_proto protoreflect.FileDescriptor
 const file_openaim_api_v1_api_proto_rawDesc = "" +
 	"\n" +
 	"\x18openaim/api/v1/api.proto\x12\x0eopenaim.api.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x12\n" +
-	"\x10GetStatusRequest\"\xfb\x02\n" +
+	"\x10GetStatusRequest\"\x9e\x03\n" +
 	"\x06Status\x12!\n" +
 	"\fidentity_key\x18\x01 \x01(\tR\videntityKey\x12\x15\n" +
 	"\x06key_id\x18\x02 \x01(\tR\x05keyId\x12\x18\n" +
@@ -2085,7 +2137,9 @@ const file_openaim_api_v1_api_proto_rawDesc = "" +
 	"\abuddies\x18\x06 \x01(\v2\x1b.openaim.api.v1.BuddyCountsR\abuddies\x124\n" +
 	"\bpresence\x18\a \x01(\v2\x18.openaim.api.v1.PresenceR\bpresence\x12'\n" +
 	"\x0fqueued_messages\x18\b \x01(\rR\x0equeuedMessages\x12\x19\n" +
-	"\bdata_dir\x18\t \x01(\tR\adataDir\"\x99\x01\n" +
+	"\bdata_dir\x18\t \x01(\tR\adataDir\x12!\n" +
+	"\frecovery_key\x18\n" +
+	" \x01(\tR\vrecoveryKey\"\x99\x01\n" +
 	"\vBuddyCounts\x12\x14\n" +
 	"\x05total\x18\x01 \x01(\rR\x05total\x12\x1f\n" +
 	"\vpending_out\x18\x02 \x01(\rR\n" +
@@ -2180,15 +2234,19 @@ const file_openaim_api_v1_api_proto_rawDesc = "" +
 	"\x10presence_changed\x18\x10 \x01(\v2\x18.openaim.api.v1.PresenceH\x00R\x0fpresenceChanged\x12I\n" +
 	"\x14buddy_handle_warning\x18\x11 \x01(\v2\x15.openaim.api.v1.BuddyH\x00R\x12buddyHandleWarningB\x06\n" +
 	"\x04kind\"\a\n" +
-	"\x05Ready\"m\n" +
+	"\x05Ready\"\xc7\x01\n" +
 	"\x13ExportBackupRequest\x12\x1e\n" +
 	"\n" +
 	"passphrase\x18\x01 \x01(\fR\n" +
 	"passphrase\x126\n" +
-	"\x17include_recovery_phrase\x18\x02 \x01(\bR\x15includeRecoveryPhrase\"W\n" +
+	"\x17include_recovery_phrase\x18\x02 \x01(\bR\x15includeRecoveryPhrase\x12'\n" +
+	"\x0fprevious_backup\x18\x03 \x01(\fR\x0epreviousBackup\x12/\n" +
+	"\x13previous_passphrase\x18\x04 \x01(\fR\x12previousPassphrase\"\xae\x01\n" +
 	"\x14ExportBackupResponse\x12\x16\n" +
 	"\x06backup\x18\x01 \x01(\fR\x06backup\x12'\n" +
-	"\x0frecovery_phrase\x18\x02 \x01(\tR\x0erecoveryPhrase\"\x11\n" +
+	"\x0frecovery_phrase\x18\x02 \x01(\tR\x0erecoveryPhrase\x122\n" +
+	"\x15includes_recovery_key\x18\x03 \x01(\bR\x13includesRecoveryKey\x12!\n" +
+	"\frecovery_key\x18\x04 \x01(\tR\vrecoveryKey\"\x11\n" +
 	"\x0fShutdownRequest\"\x12\n" +
 	"\x10ShutdownResponse*\x95\x01\n" +
 	"\n" +

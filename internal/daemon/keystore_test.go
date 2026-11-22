@@ -67,6 +67,34 @@ func TestKeychainKeystore(t *testing.T) {
 	}
 }
 
+// The recovery seed never reaches the keychain either, and the backup uses
+// the default costs when none are given.
+func TestKeychainInitWithRecoveryKey(t *testing.T) {
+	keyring.MockInit()
+	dir := tempDir(t)
+	path := tempDir(t) + "/first.oaimbak"
+	res, err := InitIdentity(ctx, InitConfig{DataDir: dir, Keystore: KeystoreModeKeychain, PassphraseFunc: noPassphrase(t),
+		BackupPath: path, BackupPassphrase: backupPass})
+	if err != nil {
+		t.Fatal(err)
+	}
+	blob, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bk, err := keystore.DecodeBackup(blob, backupPass)
+	if err != nil || bk.Recovery == nil || bk.Recovery.Public() != *res.RecoveryKey {
+		t.Fatalf("backup %+v %v", bk, err)
+	}
+	ks, _ := keystore.NewKeychainKeystore(dir)
+	if seed, err := ks.Load(); err != nil || string(seed) != string(res.Identity.Seed()) {
+		t.Fatalf("keychain item: %v", err)
+	}
+	if hits := filesContain(t, dir, bk.Recovery.Seed()); len(hits) != 0 {
+		t.Fatalf("recovery seed in %v", hits)
+	}
+}
+
 func TestKeychainItemNeverOverwritten(t *testing.T) {
 	keyring.MockInit()
 	dir := tempDir(t)

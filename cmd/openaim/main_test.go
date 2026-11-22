@@ -571,6 +571,49 @@ func TestBackupExport(t *testing.T) {
 	}
 }
 
+func TestBackupExportCarriesRecoveryKey(t *testing.T) {
+	t.Parallel()
+	dir := shortDir(t)
+	first := filepath.Join(shortDir(t), "first")
+	res, err := daemon.InitIdentity(context.Background(), daemon.InitConfig{DataDir: dir, Passphrase: testPass, KeystoreParams: fast,
+		BackupPath: first, BackupPassphrase: []byte("first pass")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	x := &h{t: t, dir: dir, me: res.Identity, d: startDaemon(t, dir)}
+	if m := jsonObj(t, x.ok("--json", "status").stdout); m["recovery_key"] != res.RecoveryKey.String() {
+		t.Fatalf("status %v", m)
+	}
+	env := map[string]string{EnvBackupPassphrase: "new pass"}
+	out := filepath.Join(shortDir(t), "plain")
+	r := x.cli(opts{vars: env}, "backup", "export", "--out", out)
+	if r.code != 0 || !strings.Contains(r.stdout, "does NOT hold your recovery key") {
+		t.Fatalf("plain export: %+v", r)
+	}
+	passFile := filepath.Join(shortDir(t), "pass")
+	if err := os.WriteFile(passFile, []byte("first pass\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out2 := filepath.Join(filepath.Dir(out), "carried")
+	r = x.cli(opts{vars: env}, "--json", "backup", "export", "--out", out2, "--from", first, "--from-passphrase-file", passFile)
+	if r.code != 0 {
+		t.Fatalf("carried export: %+v", r)
+	}
+	if m := jsonObj(t, r.stdout); m["includes_recovery_key"] != true || m["recovery_key"] != res.RecoveryKey.String() {
+		t.Fatalf("carried json %v", m)
+	}
+	blob, _ := os.ReadFile(out2)
+	b, err := keystore.DecodeBackup(blob, []byte("new pass"))
+	if err != nil || b.Recovery == nil || b.Recovery.Public() != *res.RecoveryKey {
+		t.Fatalf("carried backup %+v %v", b, err)
+	}
+	// The wrong passphrase for --from, and --from-passphrase-file alone.
+	if r := x.cli(opts{vars: env}, "backup", "export", "--out", out2+"x", "--from", first); r.code != exitError || !strings.Contains(r.stderr, "passphrase") {
+		t.Fatalf("wrong --from passphrase: %+v", r)
+	}
+	x.code(exitUsage, "backup", "export", "--out", out2+"x", "--from-passphrase-file", passFile)
+}
+
 func TestHostileText(t *testing.T) {
 	t.Parallel()
 	dir, me := initDir(t)

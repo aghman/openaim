@@ -76,9 +76,10 @@ type Node struct {
 	keyring *router.Keyring
 	recv    *frame.Receiver
 
-	mu       sync.Mutex // guards pairs and presence
-	pairs    map[identity.PublicKey]*identity.Pair
-	presence Presence
+	mu          sync.Mutex // guards pairs, presence and recoveryKey
+	pairs       map[identity.PublicKey]*identity.Pair
+	presence    Presence
+	recoveryKey *identity.PublicKey // public only; nil if none (recovery.go)
 
 	// writeMu serializes read-modify-write operations on the store and
 	// their events, so events go out in the order the changes were made.
@@ -168,6 +169,9 @@ func Open(ctx context.Context, cfg Config) (_ *Node, err error) {
 	dedup.OnError = func(err error) { n.log.Error("dedup store failed; dropping fragment", "err", err) }
 	n.recv = &frame.Receiver{Keys: n.keyring, Dedup: dedup, Now: n.now}
 	if err := n.loadPresence(ctx); err != nil {
+		return nil, err
+	}
+	if err := n.loadRecoveryKey(ctx); err != nil {
 		return nil, err
 	}
 	buddies, err := n.store.Buddies(ctx)
@@ -279,22 +283,6 @@ func (n *Node) Status(ctx context.Context) (Status, error) {
 	s.TotalBuddies = len(buddies)
 	s.QueuedMessages, err = n.store.CountOutgoing(ctx, store.Queued)
 	return s, err
-}
-
-// ExportBackup encrypts the identity and buddy list under pass
-// (spec/backup.md).
-func (n *Node) ExportBackup(ctx context.Context, pass []byte) ([]byte, error) {
-	if len(pass) == 0 {
-		return nil, fmt.Errorf("%w: empty passphrase", ErrInvalid)
-	}
-	buddies, err := n.store.Buddies(ctx)
-	if err != nil {
-		return nil, err
-	}
-	// TODO(openaim-nxb): generate the recovery key at init (design §5.5) and
-	// include it here; until then backups carry none.
-	b := &keystore.Backup{Identity: n.id, Buddies: buddies, CreatedAt: n.now()}
-	return keystore.EncodeBackup(b, pass, n.backupParams())
 }
 
 func (n *Node) backupParams() keystore.Params {

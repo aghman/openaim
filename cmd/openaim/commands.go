@@ -99,6 +99,11 @@ dir, start time, uptime and the buddy counts by state.
 			if *verbose {
 				t.row(label("By state"), cell{text: fmt.Sprintf("%d accepted, %d pending-out, %d pending-in, %d blocked",
 					bc.GetAccepted(), bc.GetPendingOut(), bc.GetPendingIn(), bc.GetBlocked())})
+				rk := "none"
+				if st.GetRecoveryKey() != "" {
+					rk = clean(st.GetRecoveryKey())
+				}
+				t.row(label("Recovery"), cell{text: rk})
 				t.row(label("Since"), cell{text: fmtTime(st.GetPresence().GetSince())})
 				t.row(label("Version"), cell{text: clean(st.GetVersion())})
 				t.row(label("Data dir"), cell{text: clean(st.GetDataDir())})

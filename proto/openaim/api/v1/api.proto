@@ -74,7 +74,9 @@ service Daemon {
   // UNAVAILABLE when the daemon shuts down.
   rpc SubscribeEvents(SubscribeEventsRequest) returns (stream Event);
 
-  // An encrypted backup file (spec/backup.md): identity seed and buddy list.
+  // An encrypted backup file (spec/backup.md): identity seed and buddy list,
+  // and the recovery seed when an earlier backup that holds it is passed in
+  // (the daemon never keeps the recovery seed; see ExportBackupRequest).
   rpc ExportBackup(ExportBackupRequest) returns (ExportBackupResponse);
 
   // Stops the daemon gracefully. It replies first, then stops.
@@ -103,6 +105,10 @@ message Status {
   Presence presence = 7;
   uint32 queued_messages = 8; // sealed messages not yet acked, all buddies
   string data_dir = 9;
+  // Our recovery public key (base32), which buddy requests and accepts
+  // carry so buddies can pin it (spec/wire.md §4.6). Empty if this identity
+  // has none: it was restored from its phrase, or made without a backup.
+  string recovery_key = 10;
 }
 
 message BuddyCounts {
@@ -316,11 +322,24 @@ message ExportBackupRequest {
   // Also return the 24-word recovery phrase, so the caller can show it
   // alongside the file (`openaim backup export`).
   bool include_recovery_phrase = 2;
+  // An earlier backup file of this identity (OAIMBAK1). The recovery seed
+  // lives only in backups, never in the daemon (spec/backup.md §5), so a new
+  // backup holds it only if it is carried over from one that does. It must
+  // be this identity's, with the recorded recovery key: otherwise
+  // FAILED_PRECONDITION. A wrong passphrase is INVALID_ARGUMENT.
+  bytes previous_backup = 3;
+  // Opens previous_backup; empty means `passphrase`.
+  bytes previous_passphrase = 4;
 }
 
 message ExportBackupResponse {
   bytes backup = 1; // an OAIMBAK1 file
   string recovery_phrase = 2;
+  // Whether `backup` holds the recovery seed. When it doesn't but
+  // recovery_key is set, keep the backup that does: without it the
+  // identity can never sign a key rotation.
+  bool includes_recovery_key = 3;
+  string recovery_key = 4; // our recovery public key (base32), or empty
 }
 
 message ShutdownRequest {}

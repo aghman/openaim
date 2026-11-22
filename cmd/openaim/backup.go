@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,12 +15,18 @@ import (
 )
 
 var cmdBackup = &command{
-	name: "backup", synopsis: "export --out FILE [--force] [--show-phrase] [--passphrase-file FILE]",
+	name: "backup", synopsis: "export --out FILE [--from OLD] [--force] [--show-phrase] [--passphrase-file FILE]",
 	summary: "write an encrypted backup of the identity and buddy list",
 	help: `The backup (spec/backup.md) holds the identity seed and the buddy list,
 encrypted under a passphrase you choose. The passphrase comes from
 --passphrase-file, else $OPENAIM_BACKUP_PASSPHRASE, else a terminal prompt
 (asked twice); it is never taken as a command-line argument.
+
+The recovery key's secret is kept only in backup files, never by the
+daemon (spec/backup.md §5). To keep it in the new backup, pass an earlier
+backup that has it (the one openaimd init wrote) with --from OLD. OLD opens
+with --from-passphrase-file, else the new backup's passphrase. Without --from
+the new backup has no recovery key: keep the one that does.
 
 The file is written with mode 0600, atomically. An existing file is not
 overwritten unless --force is given. --show-phrase also prints the 24-word
@@ -30,6 +37,8 @@ recovery phrase. The file may also be given as the argument after "export".
 		force := fs.Bool("force", false, "overwrite an existing file")
 		showPhrase := fs.Bool("show-phrase", false, "also print the 24-word recovery phrase")
 		passFile := fs.String("passphrase-file", "", "read the backup passphrase from this file")
+		from := fs.String("from", "", "an earlier backup whose recovery key to carry over")
+		fromPassFile := fs.String("from-passphrase-file", "", "read --from's passphrase from this file (default: the new backup's)")
 		return func(ctx context.Context, cl *cli, args []string) error {
 			if len(args) == 0 || args[0] != "export" {
 				if len(args) == 0 {
@@ -51,12 +60,39 @@ recovery phrase. The file may also be given as the argument after "export".
 			if path == "" {
 				return usageErrorf("missing --out FILE")
 			}
-			return cl.backupExport(ctx, path, *force, *showPhrase, *passFile)
+			return cl.backupExport(ctx, backupOpts{path: path, force: *force, showPhrase: *showPhrase, passFile: *passFile,
+				from: *from, fromPassFile: *fromPassFile})
 		}
 	},
 }
 
-func (cl *cli) backupExport(ctx context.Context, path string, force, showPhrase bool, passFile string) error {
+type backupOpts struct {
+	path, passFile, from, fromPassFile string
+	force, showPhrase                  bool
+}
+
+// maxBackupFile bounds the --from file.
+const maxBackupFile = 16<<20 + 1024
+
+func (cl *cli) backupExport(ctx context.Context, o backupOpts) error {
+	path, force, showPhrase := o.path, o.force, o.showPhrase
+	var prev []byte
+	if o.from != "" {
+		f, err := os.Open(o.from)
+		if err != nil {
+			return fmt.Errorf("--from: %w", err)
+		}
+		prev, err = io.ReadAll(io.LimitReader(f, maxBackupFile+1))
+		f.Close()
+		if err != nil {
+			return fmt.Errorf("--from: %w", err)
+		}
+		if len(prev) > maxBackupFile {
+			return fmt.Errorf("--from: %s is too large to be a backup file", clean(o.from))
+		}
+	} else if o.fromPassFile != "" {
+		return usageErrorf("--from-passphrase-file needs --from")
+	}
 	if !force {
 		if _, err := os.Lstat(path); err == nil {
 			return fmt.Errorf("%s exists; use --force to overwrite it", path)
@@ -66,12 +102,20 @@ func (cl *cli) backupExport(ctx context.Context, path string, force, showPhrase 
 	if _, err := cl.client(); err != nil {
 		return err
 	}
-	pass, err := cl.backupPassphrase(passFile)
+	pass, err := cl.backupPassphrase(o.passFile)
 	if err != nil {
 		return err
 	}
 	defer clear(pass)
-	r, err := unary(ctx, cl, rpcExportBackup, &pb.ExportBackupRequest{Passphrase: pass, IncludeRecoveryPhrase: showPhrase})
+	var prevPass []byte
+	if o.fromPassFile != "" {
+		if prevPass, err = cl.readPassphraseFile(o.fromPassFile); err != nil {
+			return err
+		}
+		defer clear(prevPass)
+	}
+	r, err := unary(ctx, cl, rpcExportBackup, &pb.ExportBackupRequest{Passphrase: pass, IncludeRecoveryPhrase: showPhrase,
+		PreviousBackup: prev, PreviousPassphrase: prevPass})
 	if err != nil {
 		return err
 	}
@@ -80,7 +124,8 @@ func (cl *cli) backupExport(ctx context.Context, path string, force, showPhrase 
 	}
 	abs, _ := filepath.Abs(path)
 	if cl.g.json {
-		obj := map[string]any{"path": abs, "bytes": len(r.GetBackup())}
+		obj := map[string]any{"path": abs, "bytes": len(r.GetBackup()), "includes_recovery_key": r.GetIncludesRecoveryKey(),
+			"recovery_key": r.GetRecoveryKey()}
 		if showPhrase {
 			obj["recovery_phrase"] = r.GetRecoveryPhrase()
 		}
@@ -88,6 +133,13 @@ func (cl *cli) backupExport(ctx context.Context, path string, force, showPhrase 
 	}
 	fmt.Fprintf(cl.e.stdout, "Wrote encrypted backup to %s (%d bytes).\n", clean(abs), len(r.GetBackup()))
 	fmt.Fprintln(cl.e.stdout, "Keep it and its passphrase safe: together they are your identity.")
+	switch {
+	case r.GetIncludesRecoveryKey():
+		fmt.Fprintln(cl.e.stdout, "It holds your recovery key.")
+	case r.GetRecoveryKey() != "":
+		fmt.Fprintln(cl.e.stdout, "It does NOT hold your recovery key (the daemon never keeps it). Keep the backup")
+		fmt.Fprintln(cl.e.stdout, "that does, or make this one from it: openaim backup export --from OLD ...")
+	}
 	if showPhrase {
 		fmt.Fprintln(cl.e.stdout)
 		printPhrase(cl.e.stdout, r.GetRecoveryPhrase())
