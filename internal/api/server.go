@@ -43,8 +43,10 @@ func (s *server) rpcError(method string, err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, daemon.ErrDuplicate):
 		return status.Error(codes.AlreadyExists, err.Error())
-	case errors.Is(err, daemon.ErrBlocked):
+	case errors.Is(err, daemon.ErrBlocked), errors.Is(err, daemon.ErrNoHandle), errors.Is(err, daemon.ErrHandleUnverified):
 		return status.Error(codes.FailedPrecondition, err.Error())
+	case errors.Is(err, daemon.ErrHandleUnreachable):
+		return status.Error(codes.Unavailable, err.Error())
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return status.FromContextError(err).Err()
 	}
@@ -81,19 +83,41 @@ func (s *server) ListBuddies(ctx context.Context, _ *pb.ListBuddiesRequest) (*pb
 	if err != nil {
 		return nil, s.rpcError("ListBuddies", err)
 	}
+	checks, err := s.n.HandleChecks(ctx)
+	if err != nil {
+		return nil, s.rpcError("ListBuddies", err)
+	}
 	out := &pb.ListBuddiesResponse{Buddies: make([]*pb.Buddy, len(bs))}
 	for i, b := range bs {
-		out.Buddies[i] = buddyPB(b)
+		var hc *store.HandleCheck
+		if c, ok := checks[b.ID]; ok {
+			hc = &c
+		}
+		out.Buddies[i] = s.buddyPB(b, hc)
 	}
 	return out, nil
 }
 
 func (s *server) AddBuddy(ctx context.Context, req *pb.AddBuddyRequest) (*pb.Buddy, error) {
-	b, err := s.n.AddBuddy(ctx, req.GetIdentityKey(), req.GetPetname(), req.GetGroup())
+	a, err := s.n.AddBuddyWith(ctx, daemon.AddBuddyOptions{
+		Key: req.GetIdentityKey(), Handle: req.GetHandle(), Petname: req.GetPetname(), Group: req.GetGroup(),
+	})
 	if err != nil {
 		return nil, s.rpcError("AddBuddy", err)
 	}
-	return buddyPB(b), nil
+	out := s.buddyPB(a.Buddy, a.Check)
+	if a.HandleDropped != nil {
+		out.HandleError = a.HandleDropped.Error()
+	}
+	return out, nil
+}
+
+func (s *server) CheckHandle(ctx context.Context, req *pb.CheckHandleRequest) (*pb.CheckHandleResponse, error) {
+	r, err := s.n.CheckHandle(ctx, req.GetBuddy())
+	if err != nil {
+		return nil, s.rpcError("CheckHandle", err)
+	}
+	return &pb.CheckHandleResponse{Buddy: s.buddyPB(r.Buddy, &r.Check), Result: handleStatuses[r.Result]}, nil
 }
 
 func (s *server) RemoveBuddy(ctx context.Context, req *pb.RemoveBuddyRequest) (*pb.RemoveBuddyResponse, error) {
@@ -108,7 +132,8 @@ func (s *server) SetBuddyVerified(ctx context.Context, req *pb.SetBuddyVerifiedR
 	if err != nil {
 		return nil, s.rpcError("SetBuddyVerified", err)
 	}
-	return buddyPB(b), nil
+	out, err := s.buddyWithCheck(ctx, b)
+	return out, s.rpcError("SetBuddyVerified", err)
 }
 
 func (s *server) GetSafetyNumber(ctx context.Context, req *pb.GetSafetyNumberRequest) (*pb.SafetyNumber, error) {
@@ -116,7 +141,11 @@ func (s *server) GetSafetyNumber(ctx context.Context, req *pb.GetSafetyNumberReq
 	if err != nil {
 		return nil, s.rpcError("GetSafetyNumber", err)
 	}
-	return &pb.SafetyNumber{SafetyNumber: sn, Buddy: buddyPB(b)}, nil
+	out, err := s.buddyWithCheck(ctx, b)
+	if err != nil {
+		return nil, s.rpcError("GetSafetyNumber", err)
+	}
+	return &pb.SafetyNumber{SafetyNumber: sn, Buddy: out}, nil
 }
 
 func (s *server) SendIM(ctx context.Context, req *pb.SendIMRequest) (*pb.SendIMResponse, error) {
@@ -175,7 +204,7 @@ func (s *server) SubscribeEvents(_ *pb.SubscribeEventsRequest, stream grpc.Serve
 					return nil
 				}
 			}
-			if pe := eventPB(e); pe != nil {
+			if pe := s.eventPB(e); pe != nil {
 				if err := stream.Send(pe); err != nil {
 					return err
 				}

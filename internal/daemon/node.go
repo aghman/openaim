@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/aghman/openaim/internal/frame"
+	"github.com/aghman/openaim/internal/handle"
 	"github.com/aghman/openaim/internal/identity"
 	"github.com/aghman/openaim/internal/keystore"
 	"github.com/aghman/openaim/internal/router"
@@ -31,8 +32,27 @@ type Config struct {
 	// KeystoreParams are the Argon2id costs for files the daemon writes
 	// (backups); zero means keystore.DefaultParams.
 	KeystoreParams keystore.Params
-	Logger         *slog.Logger     // nil discards
-	Now            func() time.Time // nil means time.Now
+	Logger         *slog.Logger // nil discards
+	// Now is the node's clock, used for timestamps and the handle re-check
+	// schedule; nil means time.Now.
+	Now func() time.Time
+
+	// HandleRegistry is the default registry domain: handles one label
+	// under it show as just that label (spec/handle.md §8). "" shortens
+	// nothing.
+	HandleRegistry string
+	// DoHResolvers are the DNS-over-HTTPS resolvers for handle lookups (at
+	// least two https URLs); nil means handle.DefaultResolvers.
+	DoHResolvers []string
+	// HandleVerifier, if set, is used instead of one built from
+	// DoHResolvers. Tests point it at local servers.
+	HandleVerifier *handle.Verifier
+	// HandleCheckConcurrency bounds simultaneous handle re-checks; zero
+	// means DefaultHandleCheckConcurrency.
+	HandleCheckConcurrency int
+	// DisableHandleLoop turns off the background re-check loop, for
+	// callers (tests) that call RecheckDueHandles themselves.
+	DisableHandleLoop bool
 }
 
 // Node is a running daemon's state. Its methods are safe for concurrent use.
@@ -56,6 +76,15 @@ type Node struct {
 	// writeMu serializes read-modify-write operations on the store and
 	// their events, so events go out in the order the changes were made.
 	writeMu sync.Mutex
+
+	// Handles (handles.go).
+	verifier   *handle.Verifier
+	registry   string
+	checkSlots int
+	sweepMu    sync.Mutex    // one re-check sweep at a time
+	wake       chan struct{} // nudges the re-check loop
+	stopLoop   context.CancelFunc
+	loopDone   chan struct{}
 }
 
 // Open takes the data directory's lock, opens the database and unlocks the
@@ -74,6 +103,9 @@ func Open(ctx context.Context, cfg Config) (_ *Node, err error) {
 	}
 	if n.now == nil {
 		n.now = time.Now
+	}
+	if err := n.setupHandles(cfg); err != nil {
+		return nil, err
 	}
 	if n.lock, err = AcquireLock(p.Lock); err != nil {
 		return nil, err
@@ -130,12 +162,16 @@ func Open(ctx context.Context, cfg Config) (_ *Node, err error) {
 		}
 	}
 	n.log.Info("identity unlocked", "key_id", pub.KeyID(), "buddies", len(buddies), "data_dir", p.Dir)
+	if !cfg.DisableHandleLoop {
+		n.startHandleLoop()
+	}
 	return n, nil
 }
 
-// Close ends event subscriptions, closes the database and releases the data
-// directory.
+// Close stops handle re-checks, ends event subscriptions, closes the
+// database and releases the data directory.
 func (n *Node) Close() error {
+	n.stopHandleLoop()
 	if n.events != nil {
 		n.events.close()
 	}

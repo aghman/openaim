@@ -130,6 +130,13 @@ func TestRunErrors(t *testing.T) {
 	if r := runCmd(ctx, "", nil, "run", "--data-dir", dir); r.code != 1 || !strings.Contains(r.stderr, "passphrase") {
 		t.Fatalf("no passphrase: %+v", r)
 	}
+	// Handle settings are checked at startup.
+	if r := runCmd(ctx, "", map[string]string{EnvPassphrase: "x"}, "run", "--data-dir", dir, "--doh-resolver", "https://a.example/dns-query"); r.code != 1 || !strings.Contains(r.stderr, "resolver") {
+		t.Fatalf("one resolver: %+v", r)
+	}
+	if r := runCmd(ctx, "", map[string]string{EnvPassphrase: "x"}, "run", "--data-dir", dir, "--registry", "-bad-"); r.code != 1 || !strings.Contains(r.stderr, "registry") {
+		t.Fatalf("bad registry: %+v", r)
+	}
 	if r := runCmd(ctx, "", nil, "frobnicate"); r.code != 2 {
 		t.Fatalf("unknown command: %+v", r)
 	}

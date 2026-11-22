@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -24,8 +25,16 @@ var buddyStates = map[store.BuddyState]pb.BuddyState{
 	store.Blocked:    pb.BuddyState_BUDDY_STATE_BLOCKED,
 }
 
-func buddyPB(b store.Buddy) *pb.Buddy {
-	return &pb.Buddy{
+var handleStatuses = map[store.HandleStatus]pb.HandleStatus{
+	store.HandleVerified:    pb.HandleStatus_HANDLE_STATUS_VERIFIED,
+	store.HandleMoved:       pb.HandleStatus_HANDLE_STATUS_MOVED,
+	store.HandleUnverified:  pb.HandleStatus_HANDLE_STATUS_UNVERIFIED,
+	store.HandleUnreachable: pb.HandleStatus_HANDLE_STATUS_UNREACHABLE,
+}
+
+// buddyPB converts a buddy with its handle check state (nil if none).
+func (s *server) buddyPB(b store.Buddy, hc *store.HandleCheck) *pb.Buddy {
+	out := &pb.Buddy{
 		IdentityKey: b.Key.String(),
 		KeyId:       b.Key.KeyID(),
 		Handle:      b.Handle,
@@ -35,8 +44,30 @@ func buddyPB(b store.Buddy) *pb.Buddy {
 		Verified:    b.Verified,
 		AddedAt:     ts(b.AddedAt),
 		// TODO(presence): the buddy's last-heard presence, once received.
-		Presence: &pb.Presence{State: pb.PresenceState_PRESENCE_STATE_OFFLINE},
+		Presence:    &pb.Presence{State: pb.PresenceState_PRESENCE_STATE_OFFLINE},
+		DisplayName: s.n.DisplayName(b),
+		ShortHandle: s.n.ShortHandle(b.Handle),
 	}
+	if hc != nil && b.Handle != "" {
+		out.HandleStatus = handleStatuses[hc.Status]
+		out.HandleLastResult = handleStatuses[hc.LastResult]
+		out.HandleCheckedAt = ts(hc.CheckedAt)
+		out.HandleNextCheckAt = ts(hc.NextCheck)
+		out.HandleError = hc.Error
+		if hc.MovedKey != nil && hc.Status == store.HandleMoved {
+			out.HandleMovedTo = hc.MovedKey.String()
+		}
+	}
+	return out
+}
+
+// buddyWithCheck converts a buddy, loading its handle check state.
+func (s *server) buddyWithCheck(ctx context.Context, b store.Buddy) (*pb.Buddy, error) {
+	hc, err := s.n.HandleCheck(ctx, b)
+	if err != nil {
+		return nil, err
+	}
+	return s.buddyPB(b, hc), nil
 }
 
 var deliveryStates = map[store.OutState]pb.DeliveryState{
@@ -80,15 +111,17 @@ func presencePB(p daemon.Presence) *pb.Presence {
 	return &pb.Presence{State: presenceToPB[p.State], AwayMessage: p.Away, Since: ts(p.Since)}
 }
 
-func eventPB(e daemon.Event) *pb.Event {
+func (s *server) eventPB(e daemon.Event) *pb.Event {
 	out := &pb.Event{Seq: e.Seq, Time: ts(e.Time)}
 	switch e.Kind {
 	case daemon.EventBuddyAdded:
-		out.Kind = &pb.Event_BuddyAdded{BuddyAdded: buddyPB(*e.Buddy)}
+		out.Kind = &pb.Event_BuddyAdded{BuddyAdded: s.buddyPB(*e.Buddy, e.HandleCheck)}
 	case daemon.EventBuddyChanged:
-		out.Kind = &pb.Event_BuddyChanged{BuddyChanged: buddyPB(*e.Buddy)}
+		out.Kind = &pb.Event_BuddyChanged{BuddyChanged: s.buddyPB(*e.Buddy, e.HandleCheck)}
 	case daemon.EventBuddyRemoved:
-		out.Kind = &pb.Event_BuddyRemoved{BuddyRemoved: buddyPB(*e.Buddy)}
+		out.Kind = &pb.Event_BuddyRemoved{BuddyRemoved: s.buddyPB(*e.Buddy, e.HandleCheck)}
+	case daemon.EventBuddyHandleWarning:
+		out.Kind = &pb.Event_BuddyHandleWarning{BuddyHandleWarning: s.buddyPB(*e.Buddy, e.HandleCheck)}
 	case daemon.EventMessageQueued:
 		out.Kind = &pb.Event_MessageQueued{MessageQueued: messagePB(*e.Message)}
 	case daemon.EventMessageReceived:

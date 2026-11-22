@@ -48,6 +48,7 @@ const (
 	Daemon_RemoveBuddy_FullMethodName      = "/openaim.api.v1.Daemon/RemoveBuddy"
 	Daemon_SetBuddyVerified_FullMethodName = "/openaim.api.v1.Daemon/SetBuddyVerified"
 	Daemon_GetSafetyNumber_FullMethodName  = "/openaim.api.v1.Daemon/GetSafetyNumber"
+	Daemon_CheckHandle_FullMethodName      = "/openaim.api.v1.Daemon/CheckHandle"
 	Daemon_SendIM_FullMethodName           = "/openaim.api.v1.Daemon/SendIM"
 	Daemon_History_FullMethodName          = "/openaim.api.v1.Daemon/History"
 	Daemon_SetPresence_FullMethodName      = "/openaim.api.v1.Daemon/SetPresence"
@@ -64,8 +65,9 @@ type DaemonClient interface {
 	GetStatus(ctx context.Context, in *GetStatusRequest, opts ...grpc.CallOption) (*Status, error)
 	// The whole buddy list, by group then name (`openaim buddies`).
 	ListBuddies(ctx context.Context, in *ListBuddiesRequest, opts ...grpc.CallOption) (*ListBuddiesResponse, error)
-	// Adds a buddy by identity key. The buddy starts in BUDDY_STATE_PENDING_OUT.
-	// M1 skeleton: no first-contact request is sent yet (design §5.4).
+	// Adds a buddy by identity key or by handle (see AddBuddyRequest). The
+	// buddy starts in BUDDY_STATE_PENDING_OUT. M1 skeleton: no first-contact
+	// request is sent yet (design §5.4).
 	AddBuddy(ctx context.Context, in *AddBuddyRequest, opts ...grpc.CallOption) (*Buddy, error)
 	// Removes a buddy with its queued messages and history.
 	RemoveBuddy(ctx context.Context, in *RemoveBuddyRequest, opts ...grpc.CallOption) (*RemoveBuddyResponse, error)
@@ -73,6 +75,10 @@ type DaemonClient interface {
 	SetBuddyVerified(ctx context.Context, in *SetBuddyVerifiedRequest, opts ...grpc.CallOption) (*Buddy, error)
 	// The safety number for us and a buddy (`openaim verify`, design §5.2).
 	GetSafetyNumber(ctx context.Context, in *GetSafetyNumberRequest, opts ...grpc.CallOption) (*SafetyNumber, error)
+	// Re-checks a buddy's handle now (spec/handle.md §7) and reschedules the
+	// next check. FAILED_PRECONDITION if the buddy has no handle. The pinned
+	// key never changes, whatever the outcome.
+	CheckHandle(ctx context.Context, in *CheckHandleRequest, opts ...grpc.CallOption) (*CheckHandleResponse, error)
 	// Seals an IM once and queues it for delivery (design §8.2). The returned
 	// msg_id identifies it in History and events from then on.
 	SendIM(ctx context.Context, in *SendIMRequest, opts ...grpc.CallOption) (*SendIMResponse, error)
@@ -161,6 +167,16 @@ func (c *daemonClient) GetSafetyNumber(ctx context.Context, in *GetSafetyNumberR
 	return out, nil
 }
 
+func (c *daemonClient) CheckHandle(ctx context.Context, in *CheckHandleRequest, opts ...grpc.CallOption) (*CheckHandleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckHandleResponse)
+	err := c.cc.Invoke(ctx, Daemon_CheckHandle_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daemonClient) SendIM(ctx context.Context, in *SendIMRequest, opts ...grpc.CallOption) (*SendIMResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SendIMResponse)
@@ -238,8 +254,9 @@ type DaemonServer interface {
 	GetStatus(context.Context, *GetStatusRequest) (*Status, error)
 	// The whole buddy list, by group then name (`openaim buddies`).
 	ListBuddies(context.Context, *ListBuddiesRequest) (*ListBuddiesResponse, error)
-	// Adds a buddy by identity key. The buddy starts in BUDDY_STATE_PENDING_OUT.
-	// M1 skeleton: no first-contact request is sent yet (design §5.4).
+	// Adds a buddy by identity key or by handle (see AddBuddyRequest). The
+	// buddy starts in BUDDY_STATE_PENDING_OUT. M1 skeleton: no first-contact
+	// request is sent yet (design §5.4).
 	AddBuddy(context.Context, *AddBuddyRequest) (*Buddy, error)
 	// Removes a buddy with its queued messages and history.
 	RemoveBuddy(context.Context, *RemoveBuddyRequest) (*RemoveBuddyResponse, error)
@@ -247,6 +264,10 @@ type DaemonServer interface {
 	SetBuddyVerified(context.Context, *SetBuddyVerifiedRequest) (*Buddy, error)
 	// The safety number for us and a buddy (`openaim verify`, design §5.2).
 	GetSafetyNumber(context.Context, *GetSafetyNumberRequest) (*SafetyNumber, error)
+	// Re-checks a buddy's handle now (spec/handle.md §7) and reschedules the
+	// next check. FAILED_PRECONDITION if the buddy has no handle. The pinned
+	// key never changes, whatever the outcome.
+	CheckHandle(context.Context, *CheckHandleRequest) (*CheckHandleResponse, error)
 	// Seals an IM once and queues it for delivery (design §8.2). The returned
 	// msg_id identifies it in History and events from then on.
 	SendIM(context.Context, *SendIMRequest) (*SendIMResponse, error)
@@ -292,6 +313,9 @@ func (UnimplementedDaemonServer) SetBuddyVerified(context.Context, *SetBuddyVeri
 }
 func (UnimplementedDaemonServer) GetSafetyNumber(context.Context, *GetSafetyNumberRequest) (*SafetyNumber, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSafetyNumber not implemented")
+}
+func (UnimplementedDaemonServer) CheckHandle(context.Context, *CheckHandleRequest) (*CheckHandleResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckHandle not implemented")
 }
 func (UnimplementedDaemonServer) SendIM(context.Context, *SendIMRequest) (*SendIMResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SendIM not implemented")
@@ -440,6 +464,24 @@ func _Daemon_GetSafetyNumber_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Daemon_CheckHandle_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckHandleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).CheckHandle(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Daemon_CheckHandle_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).CheckHandle(ctx, req.(*CheckHandleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Daemon_SendIM_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SendIMRequest)
 	if err := dec(in); err != nil {
@@ -571,6 +613,10 @@ var Daemon_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetSafetyNumber",
 			Handler:    _Daemon_GetSafetyNumber_Handler,
+		},
+		{
+			MethodName: "CheckHandle",
+			Handler:    _Daemon_CheckHandle_Handler,
 		},
 		{
 			MethodName: "SendIM",

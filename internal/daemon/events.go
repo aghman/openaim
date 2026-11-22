@@ -18,10 +18,14 @@ const (
 	EventMessageQueued
 	EventMessageReceived
 	EventPresenceChanged // ours
+	// EventBuddyHandleWarning: a re-check found the buddy's handle moved to
+	// another key or no longer verifying. Buddy and HandleCheck are set.
+	EventBuddyHandleWarning
 )
 
 // Event is one change inside the daemon. Exactly one of Buddy, Message and
-// Presence is set, according to Kind.
+// Presence is set, according to Kind. Buddy events also carry the buddy's
+// handle check state in HandleCheck, when it has one.
 type Event struct {
 	Seq      uint64 // 1, 2, … within a daemon run
 	Time     time.Time
@@ -29,6 +33,8 @@ type Event struct {
 	Buddy    *store.Buddy
 	Message  *Message
 	Presence *Presence
+
+	HandleCheck *store.HandleCheck
 }
 
 // Subscription errors, reported by Subscription.Err once C is closed.

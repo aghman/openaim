@@ -58,8 +58,8 @@ func checkAwayMessage(s string) error {
 func (n *Node) Buddies(ctx context.Context) ([]store.Buddy, error) { return n.store.Buddies(ctx) }
 
 // FindBuddy resolves a buddy selector (see the API's BuddySelector): an
-// identity key, a key ID ("~k3f9"), a petname or a handle, tried in that
-// order. Name matches ignore case.
+// identity key, a key ID ("~k3f9"), a petname, a handle or a short handle,
+// tried in that order. Name matches ignore case.
 func (n *Node) FindBuddy(ctx context.Context, sel string) (store.Buddy, error) {
 	sel = strings.TrimSpace(sel)
 	if sel == "" {
@@ -80,6 +80,7 @@ func (n *Node) FindBuddy(ctx context.Context, sel string) (store.Buddy, error) {
 		func(b store.Buddy) bool { return b.Key.KeyID() == sel },
 		func(b store.Buddy) bool { return b.Petname != "" && strings.EqualFold(b.Petname, sel) },
 		func(b store.Buddy) bool { return b.Handle != "" && strings.EqualFold(b.Handle, sel) },
+		func(b store.Buddy) bool { return b.Handle != "" && strings.EqualFold(n.ShortHandle(b.Handle), sel) },
 	}
 	for _, m := range matchers {
 		var found []store.Buddy
@@ -101,45 +102,17 @@ func (n *Node) FindBuddy(ctx context.Context, sel string) (store.Buddy, error) {
 }
 
 // AddBuddy adds a buddy by identity key (base32). The buddy starts as
-// pending_out: we've asked, they haven't accepted.
+// pending_out: we've asked, they haven't accepted. AddBuddyWith also adds
+// by handle.
 //
 // TODO(first-contact): send the FIRST_CONTACT request (design §5.4, §8.5)
 // once transports exist. For now the buddy is only recorded.
 func (n *Node) AddBuddy(ctx context.Context, key, petname, group string) (store.Buddy, error) {
-	k, err := identity.ParsePublicKeyString(strings.TrimSpace(key))
-	if err != nil {
-		return store.Buddy{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+	if strings.TrimSpace(key) == "" {
+		return store.Buddy{}, fmt.Errorf("%w: no identity key", ErrInvalid)
 	}
-	if k == n.Identity() {
-		return store.Buddy{}, fmt.Errorf("%w: that is our own key", ErrInvalid)
-	}
-	if err := checkLabel("petname", petname); err != nil {
-		return store.Buddy{}, err
-	}
-	if err := checkLabel("group", group); err != nil {
-		return store.Buddy{}, err
-	}
-	// The key must also pair: Pair rejects keys whose X25519 form is unusable.
-	if _, err := n.pair(k); err != nil {
-		return store.Buddy{}, fmt.Errorf("%w: %v", ErrInvalid, err)
-	}
-
-	n.writeMu.Lock()
-	defer n.writeMu.Unlock()
-	id, err := n.store.AddBuddy(ctx, store.Buddy{Key: k, Petname: petname, Group: group, State: store.PendingOut, AddedAt: n.now()})
-	if err != nil {
-		return store.Buddy{}, err
-	}
-	b, err := n.store.Buddy(ctx, id)
-	if err != nil {
-		return b, err
-	}
-	if err := n.trackBuddy(b); err != nil {
-		return b, err
-	}
-	n.log.Info("buddy added", "buddy", b.Key.KeyID(), "petname", b.Petname)
-	n.events.publish(Event{Kind: EventBuddyAdded, Buddy: &b})
-	return b, nil
+	a, err := n.AddBuddyWith(ctx, AddBuddyOptions{Key: key, Petname: petname, Group: group})
+	return a.Buddy, err
 }
 
 // RemoveBuddy deletes a buddy with its queued messages and history.
@@ -153,12 +126,13 @@ func (n *Node) RemoveBuddy(ctx context.Context, sel string) (store.Buddy, error)
 	if err != nil {
 		return b, err
 	}
+	check := n.handleCheckOrNil(ctx, b) // deleted with the buddy
 	if err := n.store.DeleteBuddy(ctx, b.ID); err != nil {
 		return b, err
 	}
 	n.untrackBuddy(b.Key)
 	n.log.Info("buddy removed", "buddy", b.Key.KeyID())
-	n.events.publish(Event{Kind: EventBuddyRemoved, Buddy: &b})
+	n.events.publish(Event{Kind: EventBuddyRemoved, Buddy: &b, HandleCheck: check})
 	return b, nil
 }
 
@@ -178,7 +152,7 @@ func (n *Node) SetBuddyVerified(ctx context.Context, sel string, verified bool) 
 		return b, err
 	}
 	b.Verified = verified
-	n.events.publish(Event{Kind: EventBuddyChanged, Buddy: &b})
+	n.events.publish(Event{Kind: EventBuddyChanged, Buddy: &b, HandleCheck: n.handleCheckOrNil(ctx, b)})
 	return b, nil
 }
 

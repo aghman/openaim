@@ -37,8 +37,9 @@ service Daemon {
   // The whole buddy list, by group then name (`openaim buddies`).
   rpc ListBuddies(ListBuddiesRequest) returns (ListBuddiesResponse);
 
-  // Adds a buddy by identity key. The buddy starts in BUDDY_STATE_PENDING_OUT.
-  // M1 skeleton: no first-contact request is sent yet (design §5.4).
+  // Adds a buddy by identity key or by handle (see AddBuddyRequest). The
+  // buddy starts in BUDDY_STATE_PENDING_OUT. M1 skeleton: no first-contact
+  // request is sent yet (design §5.4).
   rpc AddBuddy(AddBuddyRequest) returns (Buddy);
 
   // Removes a buddy with its queued messages and history.
@@ -49,6 +50,11 @@ service Daemon {
 
   // The safety number for us and a buddy (`openaim verify`, design §5.2).
   rpc GetSafetyNumber(GetSafetyNumberRequest) returns (SafetyNumber);
+
+  // Re-checks a buddy's handle now (spec/handle.md §7) and reschedules the
+  // next check. FAILED_PRECONDITION if the buddy has no handle. The pinned
+  // key never changes, whatever the outcome.
+  rpc CheckHandle(CheckHandleRequest) returns (CheckHandleResponse);
 
   // Seals an IM once and queues it for delivery (design §8.2). The returned
   // msg_id identifies it in History and events from then on.
@@ -80,7 +86,8 @@ service Daemon {
 //   1. an identity key (base32),
 //   2. a key ID such as "~k3f9",
 //   3. a petname, case-insensitively,
-//   4. a handle, case-insensitively.
+//   4. a handle, case-insensitively,
+//   5. a short handle (spec/handle.md §8), case-insensitively.
 // The first form that matches decides. If it matches more than one buddy the
 // call fails with INVALID_ARGUMENT; use the identity key instead.
 
@@ -126,6 +133,38 @@ message Buddy {
   // The buddy's presence as last heard. Always OFFLINE until transports
   // exist.
   Presence presence = 9;
+
+  // What to call the buddy in a list: the petname, else the short handle,
+  // else the key ID. Not a security label; show handle_status next to it.
+  string display_name = 10;
+  // The handle as the buddy list shows it: just the label for a handle one
+  // level under the daemon's configured registry (spec/handle.md §8), else
+  // the full handle. Empty when there is no handle. Info panels should show
+  // the full `handle`.
+  string short_handle = 11;
+  // The handle's standing, from its last conclusive check. MOVED and
+  // UNVERIFIED should be shown as "⚠ moved/unverified". UNSPECIFIED when
+  // there is no handle or it was never checked conclusively.
+  HandleStatus handle_status = 12;
+  // The outcome of the most recent check, which may be UNREACHABLE (the
+  // status above is then kept from before).
+  HandleStatus handle_last_result = 13;
+  google.protobuf.Timestamp handle_checked_at = 14;
+  google.protobuf.Timestamp handle_next_check_at = 15;
+  // While handle_status is MOVED: the base32 key the handle points to now.
+  // For display only; the buddy stays identity_key.
+  string handle_moved_to = 16;
+  // Why the most recent check didn't verify. In AddBuddy's reply, when a
+  // claimed handle was dropped, why it was dropped.
+  string handle_error = 17;
+}
+
+enum HandleStatus {
+  HANDLE_STATUS_UNSPECIFIED = 0;
+  HANDLE_STATUS_VERIFIED = 1;    // the handle proves the pinned key
+  HANDLE_STATUS_MOVED = 2;       // the handle proves a different key
+  HANDLE_STATUS_UNVERIFIED = 3;  // the handle answered but proves nothing
+  HANDLE_STATUS_UNREACHABLE = 4; // no trustworthy answer; retried later
 }
 
 message ListBuddiesRequest {}
@@ -134,10 +173,21 @@ message ListBuddiesResponse {
   repeated Buddy buddies = 1;
 }
 
+// Give identity_key, handle, or both:
+//   - identity_key alone adds that key.
+//   - handle alone (e.g. "alice.example.com" or "@Alice.Example.com")
+//     verifies the handle over DoH and pins the key it proves. If it doesn't
+//     verify the call fails: FAILED_PRECONDITION when the handle proves
+//     nothing, UNAVAILABLE when the lookup couldn't be done.
+//   - both adds the key, and keeps the handle only if it verifies and
+//     points to that key. Otherwise the buddy is added without a handle and
+//     the reply's handle_error says why.
+// A handle that isn't valid syntax is INVALID_ARGUMENT either way.
 message AddBuddyRequest {
   string identity_key = 1; // base32, as in an invite link
   string petname = 2;      // optional
   string group = 3;        // optional; defaults to "Buddies"
+  string handle = 4;       // optional; see above
 }
 
 message RemoveBuddyRequest {
@@ -158,6 +208,15 @@ message GetSafetyNumberRequest {
 message SafetyNumber {
   string safety_number = 1; // 8 groups of 5 digits, the same on both sides
   Buddy buddy = 2;
+}
+
+message CheckHandleRequest {
+  string buddy = 1; // BuddySelector
+}
+
+message CheckHandleResponse {
+  Buddy buddy = 1;         // after the check
+  HandleStatus result = 2; // this check's outcome
 }
 
 message SendIMRequest {
@@ -241,6 +300,11 @@ message Event {
     Message message_queued = 14;
     Message message_received = 15;
     Presence presence_changed = 16; // ours
+    // A re-check found the buddy's handle moved to another key or no longer
+    // proving anything. Sent when the status turns to a warning (or the
+    // handle moves again), not on every check; buddy_changed follows every
+    // check. The pinned key is unchanged.
+    Buddy buddy_handle_warning = 17;
   }
 }
 

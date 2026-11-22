@@ -26,6 +26,7 @@ import (
 
 	"github.com/aghman/openaim/internal/api"
 	"github.com/aghman/openaim/internal/daemon"
+	"github.com/aghman/openaim/internal/handle"
 	"github.com/aghman/openaim/internal/identity"
 	"github.com/aghman/openaim/internal/keystore"
 )
@@ -218,6 +219,13 @@ func runDaemon(ctx context.Context, args []string, e env) error {
 	var c common
 	c.register(fs)
 	socket := fs.String("socket", "", "API socket path (default: openaimd.sock in the data dir)")
+	registry := fs.String("registry", "", "default handle registry domain: handles one label under it show as just that label (default: none)")
+	var resolvers []string
+	fs.Func("doh-resolver", "DNS-over-HTTPS resolver URL for handle lookups; repeat for each (at least two; default: "+
+		strings.Join(handle.DefaultResolvers, ", ")+")", func(s string) error {
+		resolvers = append(resolvers, s)
+		return nil
+	})
 	if err := parse(fs, args, e); err != nil {
 		return err
 	}
@@ -234,7 +242,10 @@ func runDaemon(ctx context.Context, args []string, e env) error {
 		return err
 	}
 	err = api.Run(ctx, api.Config{
-		Config:     daemon.Config{DataDir: dir, Passphrase: pass, KeystoreParams: keystoreParams, Logger: log},
+		Config: daemon.Config{
+			DataDir: dir, Passphrase: pass, KeystoreParams: keystoreParams, Logger: log,
+			HandleRegistry: *registry, DoHResolvers: resolvers,
+		},
 		SocketPath: *socket,
 	})
 	if errors.Is(err, daemon.ErrNotInitialized) {

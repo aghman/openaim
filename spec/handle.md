@@ -180,6 +180,25 @@ one of:
 month. The offset is uniform random, so buddies added together aren't re-checked together. Re-checks go over DoH, so the
 domain owner doesn't see the checker's IP address (only the HTTPS proof fallback reveals it).
 
+### 7.1 What openaimd does
+
+This section is informative; it describes `internal/daemon`, not the protocol.
+
+- **Adding by handle** verifies the handle (§6) and pins the key it proves. The buddy's handle is set only after it verifies.
+  If it doesn't verify, nothing is added. Adding by key with a claimed handle adds the key either way, and keeps the
+  handle only if it verifies **and** proves that key; otherwise the reply says why the handle was dropped.
+- The verified record's inbox hint is stored with the check state, for first contact.
+- Check state lives in the store (`handle_checks`, migration 0002): the displayed status (verified, moved or unverified;
+  unreachable keeps the previous one), the latest result, when it was checked, when it next will be, and, while moved,
+  the key the handle points to now (for display; the pin is never touched).
+- A background loop sleeps until the earliest due check, runs due checks a few at a time (4 by default), stores each
+  outcome with `NextCheck` (§7, random jitter), and stops on shutdown without storing interrupted checks. Clients can
+  also re-check one buddy at once (`CheckHandle`).
+- A check emits `buddy_changed`. Turning to moved or unverified (or moving to yet another key) also emits
+  `buddy_handle_warning`, once per change rather than on every daily retry.
+- The default registry for short display (§8) and the DoH resolvers (§4.1) are daemon settings
+  (`openaimd run --registry … --doh-resolver … --doh-resolver …`).
+
 ## 8. Short display
 
 A handle that is exactly one label under the user's **configured** default registry domain is shown as just that label:
