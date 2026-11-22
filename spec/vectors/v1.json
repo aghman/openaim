@@ -8,6 +8,7 @@
   "bob_x25519": "e76c9deb04699062f797dba170461f423ab308ba33dafcb6bec1e3a6bc7b720b",
   "alice_key_b32": "xr6lznldmn27uhmcingumzze3erxp5j3tadjlxkj2jwqzyjcawsq",
   "alice_key_id": "~omff",
+  "alice_recovery_phrase": "payment artist half drive borrow speak make crouch payment artist half drive borrow speak make crouch payment artist half drive borrow speak make clean",
   "safety_number": "08133 01099 75810 99910 33920 78593 47233 52249",
   "alice_sig_handle_claim": "281f68b0136c88effc6a1faa26012240456546619970ba8a1fa08161b114ba2f0396718d4502e13a9d206e0aa20386e18a4601e5b00b9d0a3d7351e858392801",
   "k_dir_alice_to_bob": "b5ad087987fe518899770cd2d33ca9269fc1b4eaa135b56024494daf76885b68",

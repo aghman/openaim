@@ -10,6 +10,7 @@ Ed25519 key generation and the ChaCha20-Poly1305 frames.
 import hashlib
 import hmac
 import json
+import os
 import sys
 
 P = 2**255 - 19
@@ -88,6 +89,13 @@ def main(path: str) -> int:
     check("k_siv_alice_to_bob", k_siv, h(v["k_siv_alice_to_bob"]))
     tag = hmac.new(k_ab, b"openaim/v1/tag" + v["day"].to_bytes(4, "big"), hashlib.sha256).digest()[:8]
     check("conv_tag", tag, h(v["conv_tag_alice_to_bob"]))
+
+    # Recovery phrase (spec §4.5): seed ‖ SHA-256(seed)[0], 24 × 11 bits.
+    here = os.path.dirname(os.path.abspath(__file__))
+    wordlist = open(os.path.join(here, "..", "..", "internal", "identity", "wordlist", "english.txt")).read().split()
+    bits = int.from_bytes(a_seed + hashlib.sha256(a_seed).digest()[:1], "big")
+    phrase = " ".join(wordlist[(bits >> (11 * (23 - i))) & 0x7FF] for i in range(24))
+    check("alice_recovery_phrase", phrase, v["alice_recovery_phrase"])
 
     sn = int.from_bytes(hashlib.sha256(b"openaim/v1/safety-number" + lo + hi).digest(), "big") % 10**40
     digits = f"{sn:040d}"

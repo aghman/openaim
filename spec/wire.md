@@ -3,7 +3,7 @@
 **Status: draft, not frozen.** The format changes freely until the external cryptography review at the end of M2
 ([design.md §10.4](../docs/design.md#104-review-gate)). After that, this document is normative and changes only with a new wire version.
 
-The draft covers identity keys, pairwise keys, the `DATA` frame (sealing, fragmentation and receiving) and inner-payload bodies. First contact, beacons,
+The draft covers identity keys, the recovery phrase, pairwise keys, the `DATA` frame (sealing, fragmentation and receiving) and inner-payload bodies. First contact, beacons,
 adverts and rooms come later in M1 and M2. Where this document and design.md disagree, this document wins. §9 lists every
 place where it departs from design.md v0.3, with the reason.
 
@@ -94,6 +94,20 @@ Ed25519 keys can map to the same X25519 key.
   - Both sides compute the same number.
 - **Key ID (UI only):** `"~" ‖ base32(SHA-256(Ed))[:4]`.
 - **Text form of a key:** lowercase RFC 4648 base32, no padding (52 characters).
+
+### 4.5 Recovery phrase
+
+The recovery phrase is the 32-byte identity seed written as 24 words from the BIP-39 English list. The list is vendored
+at `internal/identity/wordlist/english.txt` and pinned by its SHA-256, `2f5eed53…3b24dbda`.
+
+```
+bits  = seed (256 bits) ‖ SHA-256(seed)[0] (8 bits)       // 264 bits, MSB first
+word_i = list[bits[11·i : 11·i + 11]]                     // i = 0 … 23
+```
+
+- **The same mnemonic encoding as BIP-39, nothing more.** The words encode the seed directly: there's no PBKDF2 step and no passphrase. An OpenAIM phrase is also a valid BIP-39 mnemonic, but the two are used differently, so a wallet would derive unrelated keys from it.
+- **Lenient input:** readers accept any whitespace, any letter case, and the first four letters of each word, which are unique in the list.
+- **Errors:** a wrong word count, an unknown word or a bad checksum is rejected. The 8-bit checksum catches a wrong word or a swap about 255 times in 256. Since a phrase is typed once, at restore time, the UI should also show the restored key ID so the user can compare it. Error messages give the word's position, never the word.
 
 ## 5. `DATA` frames
 

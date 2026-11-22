@@ -31,6 +31,7 @@ type Vectors struct {
 	BobX      string `json:"bob_x25519"`
 	AliceB32  string `json:"alice_key_b32"`
 	AliceID   string `json:"alice_key_id"`
+	AlicePhr  string `json:"alice_recovery_phrase"`
 	Safety    string `json:"safety_number"`
 	ClaimSig  string `json:"alice_sig_handle_claim"` // Sign("openaim/v1/handle-claim", "example")
 
@@ -89,7 +90,7 @@ func buildVectors(t *testing.T) Vectors {
 		AliceSeed: hex.EncodeToString(aseed), BobSeed: hex.EncodeToString(bseed),
 		AliceEd: hex.EncodeToString(ap[:]), BobEd: hex.EncodeToString(bp[:]),
 		AliceX: hex.EncodeToString(ax.Bytes()), BobX: hex.EncodeToString(bx.Bytes()),
-		AliceB32: ap.String(), AliceID: ap.KeyID(),
+		AliceB32: ap.String(), AliceID: ap.KeyID(), AlicePhr: alice.Phrase(),
 		Safety:   identity.SafetyNumber(ap, bp),
 		ClaimSig: hex.EncodeToString(alice.Sign("openaim/v1/handle-claim", []byte("example"))),
 		KDirAB:   hex.EncodeToString(pair.Send[:]), KDirBA: hex.EncodeToString(kba[:]),

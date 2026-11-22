@@ -1,0 +1,25 @@
+// Contents of an OpenAIM backup file (spec/backup.md). This is a local file
+// format, never sent on the wire; it travels encrypted.
+
+syntax = "proto3";
+
+package openaim.v1;
+
+option go_package = "github.com/aghman/openaim/internal/wirepb;wirepb";
+
+message BackupContents {
+  bytes identity_seed = 1; // 32 bytes
+  bytes recovery_seed = 2; // 32 bytes, or empty if no recovery key yet
+  uint64 created_at = 3;   // unix seconds
+  repeated BackupBuddy buddies = 4;
+}
+
+message BackupBuddy {
+  bytes key = 1;          // 32-byte Ed25519 identity key (pinned)
+  string handle = 2;
+  string petname = 3;
+  string group = 4;
+  string state = 5;       // store.BuddyState
+  bool verified = 6;
+  bytes recovery_key = 7; // 32 bytes, or empty
+}
