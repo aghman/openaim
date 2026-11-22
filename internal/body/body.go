@@ -6,6 +6,8 @@
 package body
 
 import (
+	"bytes"
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"unicode/utf8"
@@ -199,21 +201,54 @@ func Validate(m proto.Message) error {
 		}
 		return text("user agent", v.GetUserAgent(), MaxUserAgent)
 	case *pb.Rotate:
-		for name, k := range map[string][]byte{"old": v.GetOldKey(), "new": v.GetNewKey()} {
-			if _, err := identity.ParsePublicKey(k); err != nil {
-				return invalid("rotate %s key: %v", name, err)
-			}
-		}
-		if string(v.GetOldKey()) == string(v.GetNewKey()) {
-			return invalid("rotate to the same key")
-		}
-		if len(v.GetSignature()) != 64 {
-			return invalid("rotate signature of %d bytes", len(v.GetSignature()))
-		}
+		_, _, err := RotateStatement(v)
+		return err
 	default:
 		return fmt.Errorf("body: %T is not a body message", m)
 	}
 	return nil
+}
+
+// RotateFromStatement builds the ROTATE body for a statement and its
+// recovery-key signature (identity.SignRotation).
+func RotateFromStatement(st identity.RotationStatement, sig []byte) *pb.Rotate {
+	return &pb.Rotate{OldKey: bytes.Clone(st.Old[:]), NewKey: bytes.Clone(st.New[:]), IssuedAt: st.IssuedAt,
+		Signature: bytes.Clone(sig)}
+}
+
+// RotateStatement extracts the statement and signature from a ROTATE body,
+// checking the statement's rules that need no recovery key (spec/wire.md
+// §4.6 rules 1–3) and the signature's length. It doesn't verify the
+// signature: VerifyRotate does.
+func RotateStatement(r *pb.Rotate) (identity.RotationStatement, []byte, error) {
+	var st identity.RotationStatement
+	var err error
+	if st.Old, err = identity.ParsePublicKey(r.GetOldKey()); err != nil {
+		return st, nil, invalid("rotate old key: %v", err)
+	}
+	if st.New, err = identity.ParsePublicKey(r.GetNewKey()); err != nil {
+		return st, nil, invalid("rotate new key: %v", err)
+	}
+	st.IssuedAt = r.GetIssuedAt()
+	if err := st.Check(); err != nil {
+		return st, nil, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+	if len(r.GetSignature()) != ed25519.SignatureSize {
+		return st, nil, invalid("rotate signature of %d bytes", len(r.GetSignature()))
+	}
+	return st, bytes.Clone(r.GetSignature()), nil
+}
+
+// VerifyRotate checks a ROTATE body against the recovery key pinned for the
+// sender (identity.VerifyRotation) and returns its statement. The caller
+// still checks that the statement's old key is the sender's pinned identity
+// key, the issued_at ordering, and the clock (spec/wire.md §4.6 rules 6–8).
+func VerifyRotate(pinnedRecovery identity.PublicKey, r *pb.Rotate) (identity.RotationStatement, error) {
+	st, sig, err := RotateStatement(r)
+	if err != nil {
+		return st, err
+	}
+	return st, identity.VerifyRotation(pinnedRecovery, st, sig)
 }
 
 // recoveryKey checks an optional recovery key: empty, or a valid identity

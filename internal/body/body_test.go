@@ -286,3 +286,90 @@ func FuzzUnmarshal(f *testing.F) {
 		}
 	})
 }
+
+func TestRotateBody(t *testing.T) {
+	rec, err := identity.FromSeed(bytes.Repeat([]byte{0xAC}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, _ := identity.ParsePublicKey(idKey(t, 1))
+	nw, _ := identity.ParsePublicKey(idKey(t, 2))
+	st := identity.RotationStatement{Old: old, New: nw, IssuedAt: 59572860}
+	sig, err := identity.SignRotation(rec, st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, b, err := Marshal(RotateFromStatement(st, sig))
+	if err != nil || ct != frame.Rotate {
+		t.Fatalf("marshal: %v %v", ct, err)
+	}
+	m, err := Unmarshal(frame.Rotate, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := VerifyRotate(rec.Public(), m.(*pb.Rotate))
+	if err != nil || got != st {
+		t.Fatalf("verify: %+v %v", got, err)
+	}
+	if _, err := VerifyRotate(old, m.(*pb.Rotate)); !errors.Is(err, identity.ErrInvalidRotation) {
+		t.Fatalf("verified under the old key: %v", err)
+	}
+	st2, sig2, err := RotateStatement(m.(*pb.Rotate))
+	if err != nil || st2 != st || !bytes.Equal(sig2, sig) {
+		t.Fatal("RotateStatement doesn't invert RotateFromStatement")
+	}
+
+	// Structural rejections happen at decode time, before any key is known.
+	for name, r := range map[string]*pb.Rotate{
+		"old == new":  {OldKey: old[:], NewKey: old[:], IssuedAt: 1, Signature: sig},
+		"new == −old": {OldKey: old[:], NewKey: append(bytes.Clone(old[:31]), old[31]^0x80), IssuedAt: 1, Signature: sig},
+		"bad old":     {OldKey: make([]byte, 32), NewKey: nw[:], IssuedAt: 1, Signature: sig},
+		"short new":   {OldKey: old[:], NewKey: nw[:31], IssuedAt: 1, Signature: sig},
+		"issued_at 0": {OldKey: old[:], NewKey: nw[:], Signature: sig},
+		"short sig":   {OldKey: old[:], NewKey: nw[:], IssuedAt: 1, Signature: sig[:63]},
+	} {
+		if err := Validate(r); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: err = %v", name, err)
+		}
+		if _, err := VerifyRotate(rec.Public(), r); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: VerifyRotate err = %v", name, err)
+		}
+	}
+	// A statement Check rejects also matches identity's sentinel.
+	if _, _, err := RotateStatement(&pb.Rotate{OldKey: old[:], NewKey: old[:], IssuedAt: 1, Signature: sig}); !errors.Is(err, identity.ErrInvalidRotation) {
+		t.Errorf("old == new: err = %v", err)
+	}
+}
+
+// The golden rotation vector's body is what Marshal produces, and verifies.
+func TestRotateVector(t *testing.T) {
+	raw, err := os.ReadFile("../../spec/vectors/v1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var v struct {
+		Rotation struct {
+			RecoveryEd string `json:"recovery_ed25519"`
+			Body       string `json:"rotate_body"`
+		} `json:"rotation"`
+	}
+	if err := json.Unmarshal(raw, &v); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := hex.DecodeString(v.Rotation.Body)
+	m, err := Unmarshal(frame.Rotate, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, again, _ := Marshal(m); !bytes.Equal(again, b) {
+		t.Fatalf("Marshal gives %x, vector has %x", again, b)
+	}
+	rb, _ := hex.DecodeString(v.Rotation.RecoveryEd)
+	rk, err := identity.ParsePublicKey(rb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifyRotate(rk, m.(*pb.Rotate)); err != nil {
+		t.Fatal(err)
+	}
+}

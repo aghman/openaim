@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Independent check of spec/vectors/v1.json's key schedule.
 
-Uses only the Python standard library and a textbook RFC 7748 X25519, so it
-shares no code with the Go implementation. It recomputes everything,
-including the FIRST_CONTACT key schedule and headers (spec §11), except
-Ed25519 key generation and the ChaCha20-Poly1305 ciphertexts.
+Uses only the Python standard library, a textbook RFC 7748 X25519 and a
+textbook RFC 8032 Ed25519, so it shares no code with the Go implementation.
+It recomputes everything, including the FIRST_CONTACT key schedule and
+headers (spec §11) and the rotation statement (spec §4.6), except the
+ChaCha20-Poly1305 ciphertexts.
 
     python3 -I spec/vectors/verify_v1.py spec/vectors/v1.json
 """
@@ -46,6 +47,96 @@ def x25519(k: bytes, u: bytes) -> bytes:
     return (x2 * pow(z2, P - 2, P) % P).to_bytes(32, "little")
 
 
+# RFC 8032 Ed25519, in extended coordinates (X, Y, Z, T). Not constant time:
+# it only checks public vectors.
+L = 2**252 + 27742317777372353535851937790883648493
+D = -121665 * pow(121666, P - 2, P) % P
+SQRT_M1 = pow(2, (P - 1) // 4, P)
+
+
+def ed_add(p, q):
+    a = (p[1] - p[0]) * (q[1] - q[0]) % P
+    b = (p[1] + p[0]) * (q[1] + q[0]) % P
+    c = 2 * p[3] * q[3] * D % P
+    d = 2 * p[2] * q[2] % P
+    e, f, g, hh = b - a, d - c, d + c, b + a
+    return (e * f % P, g * hh % P, f * g % P, e * hh % P)
+
+
+def ed_mul(k: int, p):
+    q = (0, 1, 1, 0)
+    while k:
+        if k & 1:
+            q = ed_add(q, p)
+        p, k = ed_add(p, p), k >> 1
+    return q
+
+
+def ed_encode(p) -> bytes:
+    zi = pow(p[2], P - 2, P)
+    x, y = p[0] * zi % P, p[1] * zi % P
+    return (y | (x & 1) << 255).to_bytes(32, "little")
+
+
+def ed_decode(b: bytes):
+    """Strict decoding: y < p, and x = 0 only with the sign bit clear."""
+    n = int.from_bytes(b, "little")
+    y, sign = n & ((1 << 255) - 1), n >> 255
+    if y >= P:
+        return None
+    x2 = (y * y - 1) * pow(D * y * y + 1, P - 2, P) % P
+    x = pow(x2, (P + 3) // 8, P)
+    if (x * x - x2) % P:
+        x = x * SQRT_M1 % P
+    if (x * x - x2) % P or (x == 0 and sign):
+        return None
+    if x & 1 != sign:
+        x = P - x
+    return (x, y, 1, x * y % P)
+
+
+BY = 4 * pow(5, P - 2, P) % P
+BASE = ed_decode(BY.to_bytes(32, "little"))
+
+
+def sha512_int(*parts: bytes) -> int:
+    return int.from_bytes(hashlib.sha512(b"".join(parts)).digest(), "little")
+
+
+def ed_secret(seed: bytes):
+    h = hashlib.sha512(seed).digest()
+    a = int.from_bytes(h[:32], "little") & ((1 << 254) - 8) | (1 << 254)
+    return a, h[32:]
+
+
+def ed_public(seed: bytes) -> bytes:
+    return ed_encode(ed_mul(ed_secret(seed)[0], BASE))
+
+
+def ed_sign(seed: bytes, msg: bytes) -> bytes:
+    a, prefix = ed_secret(seed)
+    pub = ed_encode(ed_mul(a, BASE))
+    r = sha512_int(prefix, msg) % L
+    big_r = ed_encode(ed_mul(r, BASE))
+    k = sha512_int(big_r, pub, msg) % L
+    return big_r + ((r + k * a) % L).to_bytes(32, "little")
+
+
+def ed_verify(pub: bytes, msg: bytes, sig: bytes) -> bool:
+    """Cofactorless, rejecting S ≥ ℓ and comparing R byte for byte, as
+    crypto/ed25519 does."""
+    a = ed_decode(pub)
+    if a is None or len(sig) != 64:
+        return False
+    s = int.from_bytes(sig[32:], "little")
+    if s >= L:
+        return False
+    k = sha512_int(sig[:32], pub, msg) % L
+    # R' = S·B − k·A must encode to exactly R.
+    neg_a = ((P - a[0]) % P, a[1], a[2], (P - a[3]) % P)
+    return ed_encode(ed_add(ed_mul(s, BASE), ed_mul(k, neg_a))) == sig[:32]
+
+
 def ed_to_x(ed: bytes) -> bytes:
     """Birational map: u = (1 + y) / (1 - y)."""
     y = int.from_bytes(ed, "little") & ((1 << 255) - 1)
@@ -74,6 +165,12 @@ def main(path: str) -> int:
         checks.append((name, got == want))
         if got != want:
             print(f"MISMATCH {name}: got {got.hex() if isinstance(got, bytes) else got}")
+
+    check("alice_ed25519 (keygen)", ed_public(a_seed), a_ed)
+    check("bob_ed25519 (keygen)", ed_public(h(v["bob_seed"])), b_ed)
+    claim = b"openaim/v1/handle-claim" + b"example"
+    check("alice_sig_handle_claim (sign)", ed_sign(a_seed, claim), h(v["alice_sig_handle_claim"]))
+    check("alice_sig_handle_claim (verify)", ed_verify(a_ed, claim, h(v["alice_sig_handle_claim"])), True)
 
     a_scalar = hashlib.sha512(a_seed).digest()[:32]
     check("alice_x25519 (map)", ed_to_x(a_ed), h(v["alice_x25519"]))
@@ -161,6 +258,36 @@ def main(path: str) -> int:
             check(f"{n} frame {i} length", len(f), 42 + (48 if i == 0 else 0) + chunk + 16)
             leaks = [k for k in (a_ed, b_ed, a_x, b_x) if any(k[j:j + 8] in f for j in range(25))]
             check(f"{n} frame {i} hides keys", leaks, [])
+
+    # Rotation statement (spec §4.6), signed by Alice's recovery key.
+    r = v["rotation"]
+    rec_seed, rec_ed = h(r["recovery_seed"]), h(r["recovery_ed25519"])
+    old, new, t = h(r["old_ed25519"]), h(r["new_ed25519"]), r["issued_at"]
+    sig = h(r["signature"])
+    check("rotation recovery key (keygen)", ed_public(rec_seed), rec_ed)
+    check("rotation new key (keygen)", ed_public(h(r["new_seed"])), new)
+    check("rotation old key is alice's", old, a_ed)
+    msg = b"openaim/v1/rotate" + old + new + t.to_bytes(4, "big")
+    check("rotation signed_message", msg, h(r["signed_message"]))
+    check("rotation signed_message length", len(msg), 85)
+    y = lambda k: k[:31] + bytes([k[31] & 0x7F])  # same y means same X25519 form
+    check("rotation keys distinct (rules 2, 4)", len({y(old), y(new), y(rec_ed)}), 3)
+    check("rotation issued_at set", t > 0, True)
+    check("rotation signature (sign)", ed_sign(rec_seed, msg), sig)
+    check("rotation signature (verify)", ed_verify(rec_ed, msg, sig), True)
+    check("rotation rejects the old key as signer", ed_verify(old, msg, sig), False)
+    check("rotation rejects a tampered issued_at", ed_verify(rec_ed, msg[:-1] + bytes([msg[-1] ^ 1]), sig), False)
+    s_plus_l = sig[:32] + (int.from_bytes(sig[32:], "little") + L).to_bytes(32, "little")
+    check("rotation rejects S + l", ed_verify(rec_ed, msg, s_plus_l), False)
+
+    def uvarint(n):
+        out = b""
+        while n >= 0x80:
+            out, n = out + bytes([n & 0x7F | 0x80]), n >> 7
+        return out + bytes([n])
+
+    body = b"\x0a\x20" + old + b"\x12\x20" + new + b"\x18" + uvarint(t) + b"\x22\x40" + sig
+    check("rotation rotate_body", body, h(r["rotate_body"]))
 
     bad = [n for n, ok in checks if not ok]
     print(f"{len(checks) - len(bad)}/{len(checks)} checks passed")

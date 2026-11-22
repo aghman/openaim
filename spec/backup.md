@@ -80,3 +80,8 @@ example, a Linux server with no D-Bus session), the daemon falls back to the fil
 
 - **Passphrase policy:** minimum length or strength checks are the UI's job. The format accepts any non-empty passphrase.
 - **Upgrading the KDF:** when defaults rise, should the daemon re-seal the keystore under new parameters the next time it opens?
+- **The recovery key isn't in the phrase.** The 24-word phrase encodes the identity seed only (wire.md §4.5), and the recovery seed
+  is only in the backup file. A user who keeps the phrase but loses the file can restore their identity but can't sign a rotation
+  (wire.md §4.6), so after a compromise they'd have to re-add every buddy. Options: show a second phrase for the recovery seed at
+  setup, or have the daemon warn while no backup has been exported since the recovery key was made. Deriving the recovery seed from
+  the identity seed isn't one: anyone who stole the identity key could then rotate.

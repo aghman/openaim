@@ -35,7 +35,8 @@ Every derivation and signature has its own label. No two uses share one.
 | `openaim/v1/tag` | conversation tag | §5.2 |
 | `openaim/v1/msg` | per-message key `K_msg` | §5.4 |
 | `openaim/v1/safety-number` | safety number | §4.4 |
-| `openaim/v1/handle-claim`, `/nearby`, `/gateway-ad`, `/rotate`, `/mailbox-delegation`, `/mailbox-fetch`, `/registry-auth` | Ed25519 signatures over `label ‖ message` | design.md §10.2 |
+| `openaim/v1/rotate` | rotation statement: Ed25519 signature by the recovery key over `label ‖ old ‖ new ‖ issued_at_be32` | §4.6 |
+| `openaim/v1/handle-claim`, `/nearby`, `/gateway-ad`, `/mailbox-delegation`, `/mailbox-fetch`, `/registry-auth` | Ed25519 signatures over `label ‖ message` | design.md §10.2 |
 | `openaim/v1/first-contact` | first contact: recipient hash `h_R` | §11.2 |
 | `openaim/v1/first-contact/es`, `/ss` | first contact: chaining keys `ck1`, `ck2` | §11.2 |
 | `openaim/v1/first-contact/siv` | first contact: synthetic-ID key | §11.2 |
@@ -115,6 +116,63 @@ word_i = list[bits[11·i : 11·i + 11]]                     // i = 0 … 23
 - **The same mnemonic encoding as BIP-39, nothing more.** The words encode the seed directly: there's no PBKDF2 step and no passphrase. An OpenAIM phrase is also a valid BIP-39 mnemonic, but the two are used differently, so a wallet would derive unrelated keys from it.
 - **Lenient input:** readers accept any whitespace, any letter case, and the first four letters of each word, which are unique in the list.
 - **Errors:** a wrong word count, an unknown word or a bad checksum is rejected. The 8-bit checksum catches a wrong word or a swap about 255 times in 256. Since a phrase is typed once, at restore time, the UI should also show the restored key ID so the user can compare it. Error messages give the word's position, never the word.
+
+### 4.6 Recovery key and rotation statement
+
+Each user has a **recovery key**: a second Ed25519 key pair, generated at setup and used only to sign rotation statements
+(design §5.5).
+
+- **Where it lives.** Its seed is kept only in the backup file ([backup.md](backup.md) §2), never in the keystore or the OS keychain,
+  so a stolen device can't sign a rotation. The recovery phrase (§4.5) encodes the identity seed, not this one.
+- **Where it goes.** Its public key travels in `BUDDY_REQUEST` and `BUDDY_ACCEPT` (§6.1, §11.6), and buddies pin it next to the
+  identity key.
+- **Pinning.** A receiver doesn't pin a recovery key that fails §4.2, or that has the same X25519 form as the sender's identity key
+  (equal to it or its negation). An identity key that doubled as its own recovery key would let a device thief rotate.
+
+**The statement.** A rotation statement says that identity key `old` has been replaced by `new`:
+
+```
+issued_at = seconds since 2025-01-01T00:00:00Z, uint32       // the inner payload's clock (§6, §8)
+m         = "openaim/v1/rotate" ‖ old (32) ‖ new (32) ‖ issued_at_be32 (4)     // 85 bytes
+sig       = Ed25519-Sign(recovery key, m)                    // RFC 8032, 64 bytes
+```
+
+The label and every field after it have fixed lengths, so `m` is unambiguous. The statement and `sig` travel as a `ROTATE` body
+(content type 14, §6.1). `sig` is an ordinary signature over `label ‖ message`, like every other in §2.
+
+**Verification.** A receiver that has pinned identity key `K` and recovery key `RK` for a buddy accepts a statement only if all of
+these hold. `internal/identity` (`VerifyRotation`) checks rules 1–5. Rules 6–8 need the receiver's state and clock, so the caller checks them.
+
+1. `old` and `new` pass §4.2.
+2. `old` and `new` have different X25519 forms: their encodings differ once bit 255 is cleared. That rejects `new = old`, and also
+   `new = −old`, which shares `old`'s X25519 form, so every Diffie-Hellman result, and whose private scalar anyone holding `old`'s knows.
+3. `issued_at ≠ 0` (the protobuf default, so a missing field).
+4. `RK` passes §4.2 and has a different X25519 form from both `old` and `new`. A statement signed by a key it rotates proves nothing,
+   since whoever stole that key can sign it.
+5. `sig` is 64 bytes and verifies under `RK` over `m`, with RFC 8032 §5.1.7's checks and the cofactorless equation: `S < ℓ`, and the
+   `R` sent is byte for byte the encoding of `[S]B − [k]A`, as Go's `crypto/ed25519` does. So a signature has exactly one accepted
+   encoding. A signature by anything other than `RK`, including `old` or `new`, is rejected.
+6. `old = K`. A statement about any other key is dropped.
+7. `issued_at` is at most 10 minutes ahead of the receiver's clock, as in §7 step 4. **There's no maximum age.** A buddy who was
+   offline for months must still accept the statement, and an age limit gives no protection against a stolen recovery key, which
+   can sign any `issued_at`. Services such as the handle registry may set one for their own reasons.
+8. If the receiver has accepted a rotation for this buddy before, `issued_at` is greater than that one's.
+
+Rules 6 and 8 stop replays: after `A → B`, a replayed `A → B` fails rule 6, and after `A → B → A`, it fails rule 8.
+
+**After acceptance** the receiver pins `new` in place of `K` and keeps `RK`: the recovery key doesn't change. Re-sealing queued
+messages, keeping `old` for decryption and repointing the registry are design §5.5's, and are specified with M5.
+
+The `rotation` entry in [vectors/v1.json](vectors/v1.json) has a statement and its signature. `verify_v1.py` re-derives both keys,
+re-signs `m` and verifies the signature with its own Ed25519.
+
+**Not specified yet:**
+
+- **Delivery.** How the statement reaches buddies and the registry, and whether it travels under the old pairwise key (M5).
+- **Replacing the recovery key.** There's no statement for it. A user who loses the backup file loses the recovery key: the phrase
+  restores the identity but not the ability to rotate, so after a compromise they must re-add their buddies ([backup.md](backup.md) §4).
+- **A leaked backup** holds both seeds, so whoever has it can rotate the user to a key of their choosing. Clients should show a
+  rotation prominently and ask verified buddies to compare safety numbers again.
 
 ## 5. `DATA` frames
 
@@ -205,7 +263,7 @@ protobuf-go does with `Deterministic: true`.
 | 11 BUDDY_ACCEPT | `BuddyAccept` | presence key 32 B; recovery key empty or a valid identity key (§4.2); display name ≤ 64 B; `reach` and `caps` valid if present |
 | 12 REACH | `Reach` | `expires_at` > `issued_at`; ≤ 4 IP hints, each with a 1–64 B peer ID and ≤ 8 addresses of 1–128 B; ≤ 4 gateway and ≤ 4 mailbox hints with 32 B keys and tokens |
 | 13 CAPS | `Caps` | `wire_version` ≥ 1; user agent ≤ 64 B |
-| 14 ROTATE | `Rotate` | old and new keys valid (§4.2) and different; signature 64 B |
+| 14 ROTATE | `Rotate` | a statement that meets §4.6 rules 1–3; signature 64 B. Rules 4–8, the signature included, are checked above this layer. |
 | 15 BUDDY_REQUEST | `BuddyRequest` | display name ≤ 64 B; greeting ≤ 256 B; recovery key empty or a valid identity key (§4.2); `reach` and `caps` valid if present |
 | 8–10 rooms | — | specified with rooms (M5) |
 
@@ -278,6 +336,10 @@ Each of these was decided while writing this spec and implementing `internal/fra
 13. **New content type 15 `BUDDY_REQUEST`** (§11.6). Design §8.4's list has no type for the request itself. Its body carries a
     display name, a greeting, an optional REACH as the contact hint (design §8.5's "contact hint"), and optionally the sender's recovery
     key and CAPS, mirroring `BUDDY_ACCEPT`.
+14. **The rotation statement is pinned down** (§4.6). Design §5.5 writes `old_key ‖ new_key ‖ t` without saying what `t` is. Here
+    it's `issued_at`, uint32 seconds since the OpenAIM epoch, big-endian, as the `ROTATE` body already had it. This draft also rejects
+    `new = −old` and a recovery key that shares an X25519 form with `old`, `new` or the identity key, and fixes freshness: at most
+    10 minutes ahead, no maximum age, and `issued_at` increasing per buddy.
 
 ## 10. Open questions
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/ecdh"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -47,6 +48,22 @@ type Vectors struct {
 	Messages []MessageVector `json:"messages"`
 
 	FirstContacts []FirstContactVector `json:"first_contacts"`
+
+	Rotation RotationVector `json:"rotation"`
+}
+
+// RotationVector is a key-rotation statement (spec/wire.md §4.6): Alice's
+// recovery key moves her from alice_ed25519 to a new identity key.
+type RotationVector struct {
+	RecoverySeed  string `json:"recovery_seed"`
+	RecoveryEd    string `json:"recovery_ed25519"`
+	NewSeed       string `json:"new_seed"`
+	OldEd         string `json:"old_ed25519"`
+	NewEd         string `json:"new_ed25519"`
+	IssuedAt      uint32 `json:"issued_at"` // seconds since 2025-01-01
+	SignedMessage string `json:"signed_message"`
+	Signature     string `json:"signature"`
+	Body          string `json:"rotate_body"` // the ROTATE protobuf body, content type 14
 }
 
 // MessageVector is one message Alice seals to Bob.
@@ -86,6 +103,41 @@ type FirstContactVector struct {
 	KTail    string   `json:"k_tail,omitempty"`
 	DedupTag string   `json:"dedup_tag"`
 	Frames   []string `json:"frames"`
+}
+
+// rotateBody hand-encodes a ROTATE body (old_key = 1, new_key = 2,
+// issued_at = 3, signature = 4) in field order, as deterministic protobuf
+// does, since internal/frame doesn't import internal/body.
+func rotateBody(st identity.RotationStatement, sig []byte) []byte {
+	b := append([]byte{1<<3 | 2, 32}, st.Old[:]...)
+	b = append(append(b, 2<<3|2, 32), st.New[:]...)
+	b = binary.AppendUvarint(append(b, 3<<3|0), uint64(st.IssuedAt))
+	return append(append(b, 4<<3|2, byte(len(sig))), sig...)
+}
+
+func buildRotation(t *testing.T, old identity.PublicKey, at time.Time) RotationVector {
+	t.Helper()
+	rseed, nseed := bytes.Repeat([]byte{0xAC}, 32), bytes.Repeat([]byte{0xA2}, 32)
+	rec, err := identity.FromSeed(rseed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nw, err := identity.FromSeed(nseed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := identity.RotationStatement{Old: old, New: nw.Public(), IssuedAt: Timestamp(at) + 60}
+	sig, err := identity.SignRotation(rec, st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rp, np := rec.Public(), nw.Public()
+	return RotationVector{
+		RecoverySeed: hex.EncodeToString(rseed), RecoveryEd: hex.EncodeToString(rp[:]),
+		NewSeed: hex.EncodeToString(nseed), OldEd: hex.EncodeToString(old[:]), NewEd: hex.EncodeToString(np[:]),
+		IssuedAt: st.IssuedAt, SignedMessage: hex.EncodeToString(st.SignedMessage()),
+		Signature: hex.EncodeToString(sig), Body: hex.EncodeToString(rotateBody(st, sig)),
+	}
 }
 
 // buddyRequest hand-encodes a BUDDY_REQUEST body (display_name = 1,
@@ -210,6 +262,7 @@ func buildVectors(t *testing.T) Vectors {
 		v.Messages = append(v.Messages, mv)
 	}
 	v.FirstContacts = buildFirstContacts(t, alice, bp, at)
+	v.Rotation = buildRotation(t, ap, at)
 	return v
 }
 
@@ -264,6 +317,32 @@ func TestGoldenVectors(t *testing.T) {
 		if res.Status != Delivered || string(res.Message.Inner.Body) != m.BodyStr {
 			t.Fatalf("%s: status %v", m.Name, res.Status)
 		}
+	}
+
+	// Bob accepts Alice's rotation under her pinned recovery key, and no other.
+	rv := v.Rotation
+	var st identity.RotationStatement
+	for _, f := range []struct {
+		dst *identity.PublicKey
+		hex string
+	}{{&st.Old, rv.OldEd}, {&st.New, rv.NewEd}} {
+		b, _ := hex.DecodeString(f.hex)
+		if *f.dst, err = identity.ParsePublicKey(b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st.IssuedAt = rv.IssuedAt
+	rb, _ := hex.DecodeString(rv.RecoveryEd)
+	rk, _ := identity.ParsePublicKey(rb)
+	sig, _ := hex.DecodeString(rv.Signature)
+	if st.Old != ak || hex.EncodeToString(st.SignedMessage()) != rv.SignedMessage {
+		t.Fatal("rotation: statement doesn't match its signed message")
+	}
+	if err := identity.VerifyRotation(rk, st, sig); err != nil {
+		t.Fatalf("rotation: %v", err)
+	}
+	if err := identity.VerifyRotation(ak, st, sig); err == nil {
+		t.Fatal("rotation verified under the old identity key")
 	}
 
 	// Bob opens Alice's first contacts, last fragment first.
