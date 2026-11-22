@@ -1,6 +1,7 @@
 // Package router decides where frames go and which conversation incoming
-// frames belong to (design §7). At this stage it holds the conversation-tag
-// keyring; the send policy and retry queue come next.
+// frames belong to (design §7): the conversation-tag keyring, buddies' IP
+// reachability (ReachTable), and the Router, which sends the sealed outbox
+// over IP, retries until acked and sends ACKs (send policy v0).
 package router
 
 import (
