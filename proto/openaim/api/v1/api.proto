@@ -1,0 +1,264 @@
+// The openaimd local client API (design §3, §11).
+//
+// Every frontend (CLI, TUI, GUI) is a client of this one API, served by the
+// daemon over gRPC on a Unix domain socket in its data directory. The socket
+// is mode 0600 inside a 0700 directory: anyone who can connect controls the
+// identity (ExportBackup hands out the seed under a passphrase the caller
+// chooses), so the socket is the security boundary and there is no further
+// authentication.
+//
+// This is a local API, not a wire format. It lives in its own proto package
+// (openaim.api.v1) so it can change without touching the wire bodies in
+// openaim.v1, and its names never collide with theirs.
+//
+// Draft: may change freely until the first tagged release.
+//
+// Conventions:
+//   - Buddies are named by a selector string (BuddySelector below).
+//   - Identity keys are lowercase unpadded base32 (the invite-link form).
+//   - msg_id is the 8-byte synthetic message ID in lowercase hex.
+//   - Errors use standard gRPC codes: INVALID_ARGUMENT for bad input,
+//     NOT_FOUND for an unknown buddy, ALREADY_EXISTS for a duplicate buddy,
+//     FAILED_PRECONDITION when the buddy's state forbids the call.
+
+syntax = "proto3";
+
+package openaim.api.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/aghman/openaim/internal/apipb;apipb";
+
+service Daemon {
+  // Identity, version, uptime and counts (`openaim status`).
+  rpc GetStatus(GetStatusRequest) returns (Status);
+
+  // The whole buddy list, by group then name (`openaim buddies`).
+  rpc ListBuddies(ListBuddiesRequest) returns (ListBuddiesResponse);
+
+  // Adds a buddy by identity key. The buddy starts in BUDDY_STATE_PENDING_OUT.
+  // M1 skeleton: no first-contact request is sent yet (design §5.4).
+  rpc AddBuddy(AddBuddyRequest) returns (Buddy);
+
+  // Removes a buddy with its queued messages and history.
+  rpc RemoveBuddy(RemoveBuddyRequest) returns (RemoveBuddyResponse);
+
+  // Records that the user checked (or un-checked) the buddy's safety number.
+  rpc SetBuddyVerified(SetBuddyVerifiedRequest) returns (Buddy);
+
+  // The safety number for us and a buddy (`openaim verify`, design §5.2).
+  rpc GetSafetyNumber(GetSafetyNumberRequest) returns (SafetyNumber);
+
+  // Seals an IM once and queues it for delivery (design §8.2). The returned
+  // msg_id identifies it in History and events from then on.
+  rpc SendIM(SendIMRequest) returns (SendIMResponse);
+
+  // A buddy's recent IMs, both directions, oldest first.
+  rpc History(HistoryRequest) returns (HistoryResponse);
+
+  // Sets our presence and away message (`openaim away`). It persists across
+  // daemon restarts.
+  rpc SetPresence(SetPresenceRequest) returns (Presence);
+
+  // A live stream of changes. The first event is always `ready`, sent once
+  // the subscription is in place: a client that loads state after seeing it
+  // misses nothing. A client that falls too far behind is cut off with
+  // RESOURCE_EXHAUSTED and should resubscribe and reload. The stream ends with
+  // UNAVAILABLE when the daemon shuts down.
+  rpc SubscribeEvents(SubscribeEventsRequest) returns (stream Event);
+
+  // An encrypted backup file (spec/backup.md): identity seed and buddy list.
+  rpc ExportBackup(ExportBackupRequest) returns (ExportBackupResponse);
+
+  // Stops the daemon gracefully. It replies first, then stops.
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+}
+
+// BuddySelector (a string field named `buddy`) names one buddy. The daemon
+// tries, in order:
+//   1. an identity key (base32),
+//   2. a key ID such as "~k3f9",
+//   3. a petname, case-insensitively,
+//   4. a handle, case-insensitively.
+// The first form that matches decides. If it matches more than one buddy the
+// call fails with INVALID_ARGUMENT; use the identity key instead.
+
+message GetStatusRequest {}
+
+message Status {
+  string identity_key = 1; // base32
+  string key_id = 2;       // short UI label, e.g. "~k3f9"; not a security check
+  string version = 3;      // daemon build version
+  google.protobuf.Timestamp started_at = 4;
+  google.protobuf.Duration uptime = 5;
+  BuddyCounts buddies = 6;
+  Presence presence = 7;
+  uint32 queued_messages = 8; // sealed messages not yet acked, all buddies
+  string data_dir = 9;
+}
+
+message BuddyCounts {
+  uint32 total = 1;
+  uint32 pending_out = 2;
+  uint32 pending_in = 3;
+  uint32 accepted = 4;
+  uint32 blocked = 5;
+}
+
+enum BuddyState {
+  BUDDY_STATE_UNSPECIFIED = 0;
+  BUDDY_STATE_PENDING_OUT = 1; // we asked; waiting for them to accept
+  BUDDY_STATE_PENDING_IN = 2;  // they asked; waiting for us
+  BUDDY_STATE_ACCEPTED = 3;
+  BUDDY_STATE_BLOCKED = 4;
+}
+
+message Buddy {
+  string identity_key = 1; // base32; the buddy's identity
+  string key_id = 2;
+  string handle = 3;  // verified handle, or empty
+  string petname = 4; // local name, or empty
+  string group = 5;   // buddy-list group, e.g. "Buddies"
+  BuddyState state = 6;
+  bool verified = 7; // the user checked the safety number
+  google.protobuf.Timestamp added_at = 8;
+  // The buddy's presence as last heard. Always OFFLINE until transports
+  // exist.
+  Presence presence = 9;
+}
+
+message ListBuddiesRequest {}
+
+message ListBuddiesResponse {
+  repeated Buddy buddies = 1;
+}
+
+message AddBuddyRequest {
+  string identity_key = 1; // base32, as in an invite link
+  string petname = 2;      // optional
+  string group = 3;        // optional; defaults to "Buddies"
+}
+
+message RemoveBuddyRequest {
+  string buddy = 1; // BuddySelector
+}
+
+message RemoveBuddyResponse {}
+
+message SetBuddyVerifiedRequest {
+  string buddy = 1; // BuddySelector
+  bool verified = 2;
+}
+
+message GetSafetyNumberRequest {
+  string buddy = 1; // BuddySelector
+}
+
+message SafetyNumber {
+  string safety_number = 1; // 8 groups of 5 digits, the same on both sides
+  Buddy buddy = 2;
+}
+
+message SendIMRequest {
+  string buddy = 1; // BuddySelector
+  // UTF-8, non-empty, no control characters except newline and tab. It must
+  // fit the mesh layout, so the message can use any route.
+  string text = 2;
+}
+
+message SendIMResponse {
+  string msg_id = 1;
+  Message message = 2;
+}
+
+enum Direction {
+  DIRECTION_UNSPECIFIED = 0;
+  DIRECTION_INCOMING = 1;
+  DIRECTION_OUTGOING = 2;
+}
+
+enum DeliveryState {
+  DELIVERY_STATE_UNSPECIFIED = 0; // incoming messages
+  DELIVERY_STATE_QUEUED = 1;      // sealed, not yet fully acked
+  DELIVERY_STATE_ACKED = 2;
+  DELIVERY_STATE_FAILED = 3;
+}
+
+message Message {
+  string msg_id = 1;
+  string buddy_key = 2; // base32 identity key of the other side
+  Direction direction = 3;
+  string text = 4;
+  // When the sender sealed it (the inner timestamp, whole seconds).
+  google.protobuf.Timestamp sent_at = 5;
+  // Incoming only: when this daemon delivered it.
+  google.protobuf.Timestamp received_at = 6;
+  // Outgoing only.
+  DeliveryState delivery = 7;
+  uint64 seq = 8; // per-direction counter
+}
+
+message HistoryRequest {
+  string buddy = 1; // BuddySelector
+  uint32 limit = 2; // most recent messages to return; 0 means 100, max 1000
+}
+
+message HistoryResponse {
+  repeated Message messages = 1; // oldest first
+}
+
+enum PresenceState {
+  PRESENCE_STATE_UNSPECIFIED = 0;
+  PRESENCE_STATE_ONLINE = 1;
+  PRESENCE_STATE_AWAY = 2;
+  PRESENCE_STATE_OFFLINE = 3; // signed off
+}
+
+message Presence {
+  PresenceState state = 1;
+  // Shown to buddies while away. ≤ 1024 bytes, no control characters but
+  // newline and tab. %n, %d and %t are substituted when sent (design §11.1).
+  string away_message = 2;
+  google.protobuf.Timestamp since = 3; // when the state last changed
+}
+
+message SetPresenceRequest {
+  PresenceState state = 1; // UNSPECIFIED is rejected
+  string away_message = 2;
+}
+
+message SubscribeEventsRequest {}
+
+message Event {
+  uint64 seq = 1; // increases by one per event within a daemon run
+  google.protobuf.Timestamp time = 2;
+  oneof kind {
+    Ready ready = 10;
+    Buddy buddy_added = 11;
+    Buddy buddy_changed = 12;
+    Buddy buddy_removed = 13; // the buddy as it was
+    Message message_queued = 14;
+    Message message_received = 15;
+    Presence presence_changed = 16; // ours
+  }
+}
+
+// Ready is the first event of every subscription.
+message Ready {}
+
+message ExportBackupRequest {
+  bytes passphrase = 1; // encrypts the backup; must not be empty
+  // Also return the 24-word recovery phrase, so the caller can show it
+  // alongside the file (`openaim backup export`).
+  bool include_recovery_phrase = 2;
+}
+
+message ExportBackupResponse {
+  bytes backup = 1; // an OAIMBAK1 file
+  string recovery_phrase = 2;
+}
+
+message ShutdownRequest {}
+
+message ShutdownResponse {}

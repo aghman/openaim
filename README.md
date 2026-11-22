@@ -12,3 +12,19 @@ git submodule update --init   # Meshtastic protobufs (only needed to regenerate 
 go build -o bin/ ./cmd/...
 go test ./...
 ```
+
+## The daemon
+
+`openaimd` owns the identity, buddy list and message store and serves the local gRPC API
+([proto/openaim/api/v1/api.proto](proto/openaim/api/v1/api.proto)) on `openaimd.sock` in its data directory
+(macOS `~/Library/Application Support/openaim`, Linux `$XDG_DATA_HOME/openaim` or `~/.local/share/openaim`,
+Windows `%AppData%\openaim`; override with `--data-dir` or `$OPENAIM_DATA_DIR`).
+
+```bash
+bin/openaimd init              # create an identity; prints the 24-word recovery phrase once
+bin/openaimd init --restore    # or restore one (phrase read from the terminal or stdin)
+bin/openaimd                   # unlock and serve (same as: openaimd run)
+```
+
+The keystore passphrase comes from `--passphrase-file`, `$OPENAIM_PASSPHRASE`, or a terminal prompt.
+Regenerate the API stubs with `scripts/gen-apipb.sh` (needs `protoc-gen-go` and `protoc-gen-go-grpc`).
