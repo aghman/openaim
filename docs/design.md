@@ -450,20 +450,24 @@ A single-frame IM therefore holds **159 bytes** of text before compression. The 
 
 The first message to someone who isn't yet a buddy uses a one-way handshake modeled on Noise's `X` pattern
 (`e, es, s, ss`). It hides the sender's identity from observers and authenticates the sender to the recipient **without a signature**, so the request is deniable.
+[spec/wire.md §11](../spec/wire.md#11-first_contact-frames) has the exact key schedule and receiving rules; this section is the overview.
 
 | Field | Bytes | Notes |
 |-------|-------|-------|
-| `ver_kind` | 1 | `FIRST_CONTACT` |
-| `e` | 32 | ephemeral X25519 public key |
-| `msg_id` | 8 | synthetic, as above |
+| `ver_kind` | 1 | `FIRST_CONTACT` (mesh) or `FIRST_CONTACT_IP` (IP layout) |
+| `e` | 32 | ephemeral X25519 public key, repeated in every fragment |
+| `msg_id` | 8 | synthetic, keyed behind both DH results so tail fragments are bound to the sender |
 | `frag` | 1 | |
-| `enc(s)` | 32 + 16 | sender's Ed25519 identity key, encrypted under `DH(e, R_x)` |
-| `enc(payload)` | n + 16 | encrypted under a key from `DH(e, R_x)` and `DH(s_x, R_x)` |
-| **Overhead** | **106** | → **94 B** payload in one frame: content type, timestamp, display name, short greeting, contact hint. A longer greeting uses 2 fragments. |
+| `enc(s)` | 32 + 16 | fragment 0 only: the sender's Ed25519 identity key, encrypted under a key from `DH(e, R_x)` |
+| `enc(payload)` | n + 16 | fragment 0: encrypted under a key from `DH(e, R_x)` and `DH(s_x, R_x)`; later fragments under a key from `DH(e, R_x)` |
+| **Overhead** | **106** in fragment 0, **58** in fragment 1 | → **94 B** of inner payload in one mesh frame, 236 B in two. IP requests use one 4096 B frame. |
 
-- **Recipient binding:** the recipient is bound by the DH with their static key, and freshness by the timestamp inside. The message can't be redirected to someone else, and replays are limited by the replay window (§8.9).
-- **No recipient field:** there's deliberately no recipient hint, because it would be linkable to a public key. Recipients try to decrypt each first-contact frame, which costs one X25519 operation per frame; these frames are rare and rate-limited.
-- **Reuse:** gateway and mailbox registration use the same frame type.
+- **Payload:** a `BUDDY_REQUEST` body (content type 15): display name, short greeting, optional REACH as the contact hint, optional recovery key and capabilities. A typical one-frame mesh request leaves 87 B of body for the name and greeting. `BUDDY_REQUEST` is only valid inside first contacts, and only first contacts may carry it.
+- **Binding:** the key schedule binds both Ed25519 keys (not just their X25519 forms), the ephemeral key, and each message's `msg_id`, fragment count and layout. Re-sending persisted frames is byte-identical, so seal-once holds as for `DATA`.
+- **Recipient binding:** the recipient is bound by the DH with their static key, and freshness by the timestamp inside. The message can't be redirected to someone else, and replays are limited by the replay window and dedup (§8.9).
+- **No recipient field:** there's deliberately no recipient hint, because it would be linkable to a public key. Recipients try to decrypt each first-contact frame, which costs one X25519 operation per fragment. That's why requests are capped at two mesh fragments, and why these frames are rare and rate-limited. Every failure looks the same to the sender.
+- **Not provided:** resistance to key-compromise impersonation (anyone holding the recipient's key can forge requests to them) and forward secrecy against recipient compromise. Both are listed for the crypto review (§10.4).
+- **Reuse:** gateway and mailbox registration will use the same frame type, with a purpose binding added first so a request can't be replayed as a registration.
 
 ### 8.6 Broadcast frames (mesh)
 
