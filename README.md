@@ -28,3 +28,27 @@ bin/openaimd                   # unlock and serve (same as: openaimd run)
 
 The keystore passphrase comes from `--passphrase-file`, `$OPENAIM_PASSPHRASE`, or a terminal prompt.
 Regenerate the API stubs with `scripts/gen-apipb.sh` (needs `protoc-gen-go` and `protoc-gen-go-grpc`).
+
+## The CLI
+
+`openaim` is a scriptable client of a running daemon (same `--data-dir` / `$OPENAIM_DATA_DIR`).
+Buddies are named by identity key, key ID (`~k3f9`), petname or handle.
+
+```bash
+bin/openaim status [--verbose]                       # identity, presence, counts
+bin/openaim add <identity-key> --petname Bob         # add a buddy (pending until they accept)
+bin/openaim buddies                                  # the list, by group, with verified marks
+bin/openaim verify Bob [--confirm]                   # safety number; --confirm marks it checked
+bin/openaim send Bob "you going friday?"             # prints the msg_id
+echo "from a script" | bin/openaim send Bob -        # text from stdin
+bin/openaim history Bob --limit 20
+bin/openaim away "at class. %n, IM me later"; bin/openaim back
+bin/openaim watch --json                             # one event per line until the daemon stops
+bin/openaim backup export --out ~/oa-backup          # encrypted, mode 0600; --show-phrase, --force
+bin/openaim remove Bob; bin/openaim shutdown; bin/openaim version
+```
+
+`--json` prints one JSON object per result (the API's messages in proto3 JSON with `.proto` field names);
+errors then go to stderr as `{"error":…,"code":…,"exit_code":…}`. Exit codes: 0 ok, 1 error, 2 usage,
+3 daemon not running, 4 no such buddy, 5 buddy already added. The backup passphrase comes from
+`--passphrase-file`, `$OPENAIM_BACKUP_PASSPHRASE`, or a terminal prompt. `openaim help <command>` has the details.
