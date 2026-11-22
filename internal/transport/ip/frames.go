@@ -1,7 +1,7 @@
 // Package ip is the IP transport (design §6.1), built on go-libp2p.
 //
-// At M0 it holds only what the relay spike needs: host construction with a
-// fresh network key per run, a circuit relay v2 service with configurable
+// It holds host construction, Node (a host whose network key rotates; see
+// docs/ip-rotation-and-dht.md), a circuit relay v2 service with configurable
 // limits, relay reservations, and the length-prefixed frame stream used by
 // /openaim/msg/1.
 package ip
