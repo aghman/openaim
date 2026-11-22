@@ -315,7 +315,9 @@ func TestMessaging(t *testing.T) {
 	x.code(exitNotFound, "send", "Mallory", "hi")
 	x.code(exitError, "send", "Bob", "bell\a")
 
-	// An incoming IM.
+	// An incoming IM. History orders by millisecond store time and puts
+	// incoming first on a tie, so let the clock move past the last send.
+	time.Sleep(3 * time.Millisecond)
 	for _, f := range sealFrom(t, bob, x.me.Public(), 1, "yeah if my radio reaches lol") {
 		if _, err := x.d.Node().HandleFrame(context.Background(), f); err != nil {
 			t.Fatal(err)

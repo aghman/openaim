@@ -7,77 +7,26 @@ import (
 	"io"
 	"strings"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
-	"golang.org/x/text/width"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/aghman/openaim/internal/apipb"
+	"github.com/aghman/openaim/internal/termtext"
 )
 
 // Everything printed from the daemon (petnames, handles, groups, IMs, away
 // messages, error text) may come from another person, and this is a
 // terminal. The daemon rejects control characters in what it accepts, but
-// the CLI cleans what it prints anyway.
-
-// unsafeRune reports runes that can move the cursor, rewrite the screen or
-// reorder text: C0 and C1 controls, DEL, line and paragraph separators, and
-// the bidirectional overrides, embeddings and isolates.
-func unsafeRune(r rune) bool {
-	switch {
-	case unicode.IsControl(r):
-		return true
-	case r == ' ', r == ' ':
-		return true
-	case r == '؜', r == '‎', r == '‏':
-		return true
-	case r >= '‪' && r <= '‮', r >= '⁦' && r <= '⁩':
-		return true
-	}
-	return false
-}
-
-const replacement = '�'
-
-// clean makes s safe to print on one line: newlines and tabs become spaces
-// and other unsafe runes (and invalid UTF-8) become U+FFFD.
-func clean(s string) string {
-	s = strings.ToValidUTF8(s, string(replacement))
-	return strings.Map(func(r rune) rune {
-		switch {
-		case r == '\n' || r == '\t':
-			return ' '
-		case unsafeRune(r):
-			return replacement
-		}
-		return r
-	}, s)
-}
-
-// cleanText makes multi-line text (an IM) safe to print: it keeps tabs and
-// line breaks, indenting continuation lines by indent.
-func cleanText(s, indent string) string {
-	s = strings.ToValidUTF8(s, string(replacement))
-	var b strings.Builder
-	for _, r := range s {
-		switch {
-		case r == '\n':
-			b.WriteByte('\n')
-			b.WriteString(indent)
-		case r == '\t':
-			b.WriteRune(r)
-		case unsafeRune(r):
-			b.WriteRune(replacement)
-		default:
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
+// the CLI cleans what it prints anyway, with the rules in internal/termtext.
+var (
+	unsafeRune = termtext.Unsafe
+	clean      = termtext.Clean
+	cleanText  = termtext.CleanText
+)
 
 // JSON output.
 
@@ -217,21 +166,8 @@ func (t *table) write(w io.Writer, s style) {
 	io.WriteString(w, b.String())
 }
 
-// displayWidth is how many terminal columns s takes, roughly: wide East
-// Asian runes take two and combining marks none.
-func displayWidth(s string) int {
-	n := 0
-	for _, r := range s {
-		switch {
-		case unicode.Is(unicode.Mn, r), unicode.Is(unicode.Me, r):
-		case width.LookupRune(r).Kind() == width.EastAsianWide, width.LookupRune(r).Kind() == width.EastAsianFullwidth:
-			n += 2
-		default:
-			n++
-		}
-	}
-	return n
-}
+// displayWidth is how many terminal columns s takes, roughly.
+var displayWidth = termtext.Width
 
 // Formatting of API values.
 

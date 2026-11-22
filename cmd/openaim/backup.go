@@ -95,26 +95,32 @@ func (cl *cli) backupExport(ctx context.Context, path string, force, showPhrase 
 	return nil
 }
 
+// readPassphraseFile reads a passphrase from a file, without its trailing
+// newline, and warns if other users can read the file.
+func (cl *cli) readPassphraseFile(file string) ([]byte, error) {
+	fi, err := os.Stat(file)
+	if err != nil {
+		return nil, fmt.Errorf("passphrase file: %w", err)
+	}
+	if runtime.GOOS != "windows" && fi.Mode().Perm()&0o077 != 0 {
+		fmt.Fprintf(cl.e.stderr, "openaim: warning: %s is readable by other users (mode %04o)\n", clean(file), fi.Mode().Perm())
+	}
+	b, err := os.ReadFile(file)
+	if err != nil {
+		return nil, fmt.Errorf("passphrase file: %w", err)
+	}
+	b = bytes.TrimSuffix(bytes.TrimSuffix(b, []byte("\n")), []byte("\r"))
+	if len(b) == 0 {
+		return nil, errors.New("passphrase file is empty")
+	}
+	return b, nil
+}
+
 // backupPassphrase reads the passphrase from the file, the environment or
 // the terminal (twice), in that order.
 func (cl *cli) backupPassphrase(file string) ([]byte, error) {
 	if file != "" {
-		fi, err := os.Stat(file)
-		if err != nil {
-			return nil, fmt.Errorf("passphrase file: %w", err)
-		}
-		if runtime.GOOS != "windows" && fi.Mode().Perm()&0o077 != 0 {
-			fmt.Fprintf(cl.e.stderr, "openaim: warning: %s is readable by other users (mode %04o)\n", clean(file), fi.Mode().Perm())
-		}
-		b, err := os.ReadFile(file)
-		if err != nil {
-			return nil, fmt.Errorf("passphrase file: %w", err)
-		}
-		b = bytes.TrimSuffix(bytes.TrimSuffix(b, []byte("\n")), []byte("\r"))
-		if len(b) == 0 {
-			return nil, errors.New("passphrase file is empty")
-		}
-		return b, nil
+		return cl.readPassphraseFile(file)
 	}
 	if p := cl.e.getenv(EnvBackupPassphrase); p != "" {
 		return []byte(p), nil

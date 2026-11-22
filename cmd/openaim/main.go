@@ -176,7 +176,7 @@ var commands []*command
 func init() {
 	commands = []*command{
 		cmdStatus, cmdBuddies, cmdAdd, cmdRemove, cmdVerify, cmdSend, cmdHistory,
-		cmdAway, cmdBack, cmdWatch, cmdBackup, cmdShutdown, cmdVersion, cmdHelp,
+		cmdAway, cmdBack, cmdWatch, cmdTUI, cmdBackup, cmdShutdown, cmdVersion, cmdHelp,
 	}
 }
 

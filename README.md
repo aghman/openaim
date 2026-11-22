@@ -52,3 +52,20 @@ bin/openaim remove Bob; bin/openaim shutdown; bin/openaim version
 errors then go to stderr as `{"error":…,"code":…,"exit_code":…}`. Exit codes: 0 ok, 1 error, 2 usage,
 3 daemon not running, 4 no such buddy, 5 buddy already added. The backup passphrase comes from
 `--passphrase-file`, `$OPENAIM_BACKUP_PASSPHRASE`, or a terminal prompt. `openaim help <command>` has the details.
+
+## The TUI
+
+```bash
+bin/openaim tui               # buddy list + IM window, against a running openaimd
+bin/openaim tui --embedded    # no daemon running? run one inside the TUI while it is open
+```
+
+The buddy list (left) shows your groups with who is on, then an Offline group; groups collapse with
+Space or ←/→. The IM window (right) shows the history with `[queued]`/`[delivered]`/`[failed]` marks and
+a byte counter for the mesh route ("159 bytes left (1/4)": 159 B in the first fragment, 166 B in each
+later one, up to 4 = 657 B). Contacts whose safety number you haven't checked are italic, with a ⚠ badge
+and their key ID. Keys: Tab switch, Enter open/send, Ctrl+N new IM, Ctrl+A away/back, Ctrl+B add
+buddy, `v` verify, `x` remove, F1 or `?` help, Ctrl+C quit. If the daemon stops, the TUI says so and
+reconnects by itself. Without `--embedded` it asks before starting a daemon; the passphrase then comes from
+`--passphrase-file`, `$OPENAIM_PASSPHRASE` or a prompt, before the screen opens. `NO_COLOR` turns colors off
+(bold, italic and reverse stay).
