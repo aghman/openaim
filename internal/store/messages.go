@@ -169,18 +169,19 @@ func (s *Store) RecordAttempt(ctx context.Context, id int64, at time.Time) error
 	return s.update(ctx, "UPDATE outbox SET attempts = attempts + 1, last_attempt = ? WHERE id = ?", at.UnixMilli(), id)
 }
 
-// Ack merges an ACK's fragment bitmap into the message identified by its tag
-// and msg_id, marking it acked once every fragment is. It returns the
+// Ack merges an ACK entry's fragment bitmap into the buddy's message with
+// msgID, marking it acked once every fragment is. ACKs name messages by
+// msg_id only (spec/wire.md §6.1), so the lookup is per buddy. It returns the
 // updated entry (without frames), or ErrNotFound for an ack of something we
-// never sent.
-func (s *Store) Ack(ctx context.Context, tag frame.ConvTag, msgID frame.MsgID, mask uint16) (*Outgoing, error) {
+// never sent to that buddy.
+func (s *Store) Ack(ctx context.Context, buddyID int64, msgID frame.MsgID, mask uint16) (*Outgoing, error) {
 	o, err := scanOut(s.db.QueryRowContext(ctx,
 		`UPDATE outbox SET
 		   acked_mask = acked_mask | (? & ((1 << frag_count) - 1)),
 		   state = CASE WHEN state = 'queued' AND (acked_mask | ?) & ((1 << frag_count) - 1) = (1 << frag_count) - 1
 		                THEN 'acked' ELSE state END
-		 WHERE conv_tag = ? AND msg_id = ?
-		 RETURNING `+outCols, mask, mask, tag[:], msgID[:]))
+		 WHERE buddy_id = ? AND msg_id = ?
+		 RETURNING `+outCols, mask, mask, buddyID, msgID[:]))
 	if err != nil {
 		return nil, err
 	}

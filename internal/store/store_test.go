@@ -191,19 +191,23 @@ func TestAcks(t *testing.T) {
 	if err := s.RecordAttempt(ctx, o.ID, testNow); err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.Ack(ctx, o.Tag, o.MsgID, 0b101)
+	got, err := s.Ack(ctx, bid, o.MsgID, 0b101)
 	if err != nil || got.State != Queued || got.AckedMask != 0b101 || got.Attempts != 1 {
 		t.Fatalf("partial ack: %+v %v", got, err)
 	}
-	got, err = s.Ack(ctx, o.Tag, o.MsgID, 0b1111_0010) // bits beyond frag_count are ignored
+	got, err = s.Ack(ctx, bid, o.MsgID, 0b1111_0010) // bits beyond frag_count are ignored
 	if err != nil || got.State != Acked || got.AckedMask != 0b111 {
 		t.Fatalf("full ack: %+v %v", got, err)
 	}
 	if pend, _ := s.Pending(ctx, bid); len(pend) != 0 {
 		t.Fatalf("acked message still pending")
 	}
-	if _, err := s.Ack(ctx, o.Tag, frame.MsgID{1}, 1); !errors.Is(err, ErrNotFound) {
+	if _, err := s.Ack(ctx, bid, frame.MsgID{1}, 1); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("ack of unknown message: %v", err)
+	}
+	other := addBuddy(t, s, 2)
+	if _, err := s.Ack(ctx, other, o.MsgID, 1); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("another buddy acked our message: %v", err)
 	}
 	o2, _ := s.Enqueue(ctx, bid, sealIM(k, "give up"))
 	if err := s.MarkFailed(ctx, o2.ID); err != nil {

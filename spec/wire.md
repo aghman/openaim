@@ -3,7 +3,7 @@
 **Status: draft, not frozen.** The format changes freely until the external cryptography review at the end of M2
 ([design.md §10.4](../docs/design.md#104-review-gate)). After that, this document is normative and changes only with a new wire version.
 
-The draft covers identity keys, pairwise keys and the `DATA` frame (sealing, fragmentation and receiving). First contact, beacons,
+The draft covers identity keys, pairwise keys, the `DATA` frame (sealing, fragmentation and receiving) and inner-payload bodies. First contact, beacons,
 adverts and rooms come later in M1 and M2. Where this document and design.md disagree, this document wins. §9 lists every
 place where it departs from design.md v0.3, with the reason.
 
@@ -163,7 +163,39 @@ content_type (1) | flags (1) | timestamp (4) | seq (uvarint) | body
 - **`flags`:** bit 0 is compressed, bit 1 is ack-requested, bit 2 is clock-unsynced. Receivers reject other bits in this draft.
 - **`content_type`:** 1 IM, 2 ACK, 3 PRESENCE, 4 PROFILE_REQ, 5 PROFILE, 6 AWAY_MSG, 7 TYPING (IP only), 8 ROOM_MSG, 9 ROOM_INVITE,
   10 ROOM_REKEY, 11 BUDDY_ACCEPT, 12 REACH, 13 CAPS, 14 ROTATE. The frame layer passes unknown types to the router.
-- **`body`:** UTF-8 text for IM, protobuf for the others (to be specified). A one-fragment mesh IM has 166 − 7 = **159 B** of body when `seq < 128`.
+- **`body`:** UTF-8 text for IM, protobuf for the others (§6.1). A one-fragment mesh IM has 166 − 7 = **159 B** of body when `seq < 128`.
+
+### 6.1 Bodies
+
+IM bodies are UTF-8 text. Every other content type has a protobuf body. The message definitions in
+[proto/openaim/v1/bodies.proto](../proto/openaim/v1/bodies.proto) are normative. Senders encode deterministically, which
+protobuf-go does with `Deterministic: true`.
+
+| Content type | Body | Limits (receivers reject anything outside them) |
+|--------------|------|------------------------------------------------|
+| 1 IM | UTF-8 text | not empty |
+| 2 ACK | `Ack` | 1–32 entries. Each `msg_id` is 8 bytes; `have` is nonzero and < 2^16. |
+| 3 PRESENCE | `Presence` | `state` is ONLINE, AWAY or OFFLINE; `idle_minutes` ≤ 525 600 |
+| 4 PROFILE_REQ | `ProfileReq` | asks for at least one part |
+| 5 PROFILE | `Profile` | display name ≤ 64 B, text ≤ 1024 B |
+| 6 AWAY_MSG | `AwayMsg` | text ≤ 1024 B |
+| 7 TYPING | `Typing` | `state` is TYPING, PAUSED or IDLE |
+| 11 BUDDY_ACCEPT | `BuddyAccept` | presence key 32 B; recovery key empty or a valid identity key (§4.2); display name ≤ 64 B; `reach` and `caps` valid if present |
+| 12 REACH | `Reach` | `expires_at` > `issued_at`; ≤ 4 IP hints, each with a 1–64 B peer ID and ≤ 8 addresses of 1–128 B; ≤ 4 gateway and ≤ 4 mailbox hints with 32 B keys and tokens |
+| 13 CAPS | `Caps` | `wire_version` ≥ 1; user agent ≤ 64 B |
+| 14 ROTATE | `Rotate` | old and new keys valid (§4.2) and different; signature 64 B |
+| 8–10 rooms | — | specified with rooms (M5) |
+
+**Text.**
+- IM bodies and every string field must be valid UTF-8.
+- They contain no C0 control characters other than newline and tab, and no DEL or C1 controls (U+007F–U+009F).
+- Buddies' text is shown in terminals, where ESC or CSI sequences could rewrite the screen. Bidirectional-override and look-alike tricks are left to the UI.
+
+**ACKs name messages by `msg_id` alone.** An ACK travels in the reverse direction under a different `conv_tag`, and carrying
+the original tag would cost 8 more bytes per entry on mesh. So the sender matches an ACK to its own messages to that buddy by `msg_id`.
+
+**Typical sizes.** A presence update is 14 B and fits in one fragment along with everything else. A one-entry ACK is 14 B, and
+8 entries are 128 B. A REACH with one IP hint (an IPv4 and an IPv6 address) plus a mesh node is 96 B. A BUDDY_ACCEPT carrying that REACH is 177 B, two mesh fragments.
 
 ## 7. Receiving
 

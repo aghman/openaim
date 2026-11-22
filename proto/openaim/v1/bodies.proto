@@ -1,0 +1,144 @@
+// Bodies of OpenAIM inner payloads (spec/wire.md §6.1, design §8.4).
+//
+// The inner payload's content_type says which message the body is. IM bodies
+// are plain UTF-8 and have no message here. These bodies travel inside
+// sealed DATA frames, so mesh byte budgets matter: hot fields use numbers
+// 1–15 (one-byte tags), and bytes are fixed-size where possible.
+//
+// Draft: field numbers may change until the wire freeze at the end of M2.
+
+syntax = "proto3";
+
+package openaim.v1;
+
+option go_package = "github.com/aghman/openaim/internal/wirepb;wirepb";
+
+// ACK (content type 2): fragments received, per message. Sent on IP and on
+// the mesh broadcast path, never on the mesh DM path (design §8.8).
+message Ack {
+  repeated AckEntry entries = 1; // 1–32 entries
+}
+
+message AckEntry {
+  bytes msg_id = 1; // 8 bytes: the acked message's msg_id
+  uint32 have = 2;  // bit i = fragment i received; nonzero, < 1<<16
+}
+
+// PRESENCE (content type 3).
+message Presence {
+  PresenceState state = 1;
+  uint32 idle_minutes = 2; // 0 = not idle
+  // Changes whenever the away message changes, so buddies know to fetch it
+  // (away messages are fetched on demand, never broadcast; design §6.2).
+  uint32 away_rev = 3;
+  // Our radio's Meshtastic node number, 0 if none. A reachability hint that
+  // comes only from authenticated content (design §7.1).
+  fixed32 my_mesh_node = 4;
+}
+
+enum PresenceState {
+  PRESENCE_STATE_UNSPECIFIED = 0;
+  PRESENCE_STATE_ONLINE = 1;
+  PRESENCE_STATE_AWAY = 2;
+  PRESENCE_STATE_OFFLINE = 3; // signing off ("door close")
+}
+
+// PROFILE_REQ (content type 4): ask for the parts that changed.
+message ProfileReq {
+  bool profile = 1;
+  bool away_msg = 2;
+}
+
+// PROFILE (content type 5).
+message Profile {
+  string display_name = 1; // ≤ 64 bytes
+  string text = 2;         // ≤ 1024 bytes
+}
+
+// AWAY_MSG (content type 6).
+message AwayMsg {
+  string text = 1; // ≤ 1024 bytes
+  uint32 rev = 2;  // matches Presence.away_rev
+}
+
+// TYPING (content type 7, IP only).
+message Typing {
+  TypingState state = 1;
+}
+
+enum TypingState {
+  TYPING_STATE_UNSPECIFIED = 0;
+  TYPING_STATE_TYPING = 1;
+  TYPING_STATE_PAUSED = 2; // text entered, not typing
+  TYPING_STATE_IDLE = 3;   // cleared
+}
+
+// BUDDY_ACCEPT (content type 11): sent when accepting a buddy request
+// (design §5.4). Pairwise keys already exist, so this is a DATA frame.
+message BuddyAccept {
+  bytes presence_key = 1;  // 32 bytes: our current presence key
+  bytes recovery_key = 2;  // 32 bytes, or empty: our recovery public key, to pin
+  string display_name = 3; // ≤ 64 bytes
+  Reach reach = 4;
+  Caps caps = 5;
+}
+
+// REACH (content type 12): how to reach the sender (design §7.1). A record
+// with a lower seq than one already held, or past expires_at, is ignored.
+message Reach {
+  uint64 seq = 1;
+  uint32 issued_at = 2;  // seconds since the OpenAIM epoch
+  uint32 expires_at = 3; // seconds since the OpenAIM epoch; > issued_at
+  repeated IPHint ip = 4;           // ≤ 4
+  MeshHint mesh = 5;
+  repeated GatewayHint gateway = 6; // ≤ 4 (M3)
+  repeated MailboxHint mailbox = 7; // ≤ 4 (M3)
+}
+
+message IPHint {
+  bytes peer_id = 1;         // libp2p peer ID bytes, ≤ 64
+  repeated bytes addrs = 2;  // binary multiaddrs, ≤ 8, each ≤ 128 bytes
+}
+
+message MeshHint {
+  fixed32 node_num = 1;
+}
+
+message GatewayHint {
+  bytes gateway_key = 1; // 32 bytes
+  bytes contact = 2;     // binary multiaddr, ≤ 128 bytes
+  fixed32 node_num = 3;  // our node number behind that gateway
+  uint32 token_index = 4;
+  bytes token = 5;       // 32 bytes: HKDF(T, "token" ‖ j)
+}
+
+message MailboxHint {
+  bytes mailbox_key = 1;   // 32 bytes
+  bytes contact = 2;       // binary multiaddr, ≤ 128 bytes
+  bytes deposit_token = 3; // 32 bytes
+}
+
+// CAPS (content type 13): exchanged when buddies connect (design §8.10).
+message Caps {
+  uint32 wire_version = 1; // highest wire version supported
+  uint64 features = 2;     // Feature bits
+  string user_agent = 3;   // ≤ 64 bytes, optional
+}
+
+enum Feature {
+  FEATURE_NONE = 0;
+  FEATURE_TYPING = 1;
+  FEATURE_IP_LAYOUT = 2;
+  FEATURE_ROOMS = 4;
+  FEATURE_READ_RECEIPTS = 8;
+}
+
+// ROTATE (content type 14): a signed key-rotation statement (design §5.5).
+// The signature is by the recovery key over
+// "openaim/v1/rotate" ‖ old_key ‖ new_key ‖ issued_at_be32.
+message Rotate {
+  bytes old_key = 1;    // 32 bytes
+  bytes new_key = 2;    // 32 bytes
+  uint32 issued_at = 3; // seconds since the OpenAIM epoch
+  bytes signature = 4;  // 64 bytes
+}

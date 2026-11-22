@@ -41,6 +41,7 @@ CREATE TABLE outbox (
     UNIQUE (buddy_id, seq)
 );
 CREATE INDEX outbox_pending ON outbox (buddy_id, state, id);
+CREATE INDEX outbox_by_msg ON outbox (buddy_id, msg_id); -- ACKs name msg_id only
 
 CREATE TABLE outbox_frames (
     outbox_id INTEGER NOT NULL REFERENCES outbox (id) ON DELETE CASCADE,
