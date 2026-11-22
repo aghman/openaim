@@ -1,7 +1,9 @@
-# IP transport: rotating network keys
+# IP transport: rotating network keys, private DHT, bootstrap config
 
-This note records how `internal/transport/ip` implements the rotating network key of
-[design.md §5.1 and §6.1](design.md#61-ip-go-libp2p), and which linkability residuals remain.
+This note records how `internal/transport/ip` implements three parts of
+[design.md §5.1 and §6.1](design.md#61-ip-go-libp2p): the rotating network key, the private DHT, and the bootstrap
+config. It also lists which linkability residuals remain. The DHT record format is in
+[spec/dht-records.md](../spec/dht-records.md).
 
 ## Rotation (`ip.Node`)
 
@@ -54,3 +56,50 @@ Residuals (documented, not solved here):
   the old host's teardown (the grace period) doesn't hide the new host's arrival. Staggering (bringing up the new host
   minutes before switching to it) would weaken this but not remove it.
 - **Buddies** learn every new peer ID; that is the point. Only they can link them.
+
+## Private DHT (`ip.DHT`)
+
+`ip.NewDHT(ctx, node, opts)` runs go-libp2p-kad-dht v0.43.1 with protocol `/openaim/kad/1.0.0` on a `Node` and
+follows its rotations through `Node.Attach`:
+
+- **One instance per host generation.** Each instance starts with an empty routing table and an empty in-memory
+  datastore, and routing-table persistence is off. Before the new host becomes current, its instance connects to the
+  configured bootstrap peers and runs one routing-table refresh, bounded by `BootstrapTimeout` (10 s). Running out of
+  time isn't an error, because the first node of a network has nobody to find.
+- **No reuse across generations.** The new routing table is seeded only from config, never from the old one, whose
+  keyspace-specific peer set would fingerprint the node. The datastore isn't shared either. Otherwise an attacker
+  could store a unique record on the old peer ID by direct RPC and ask the new one for it. Our own generations are
+  filtered out of each other's routing tables and queries, because records stored on a draining host die with it.
+- **Retirement.** The old instance keeps serving during the grace period and closes before its host does. Records it
+  stored for others are lost. Kademlia stores each value on ~20 peers, and publishers republish (rendezvous ticket).
+- **Modes.** `DHTServer` for bootstrap and other public nodes, `DHTAuto` (server only once AutoNAT says the host is
+  public) for ordinary peers, `DHTClient` to never serve.
+- **Records.** Only the self-certifying `/oa-rdv/` namespace is accepted (see the spec). Provider records are disabled.
+
+## Bootstrap and relay config (`ip.NetworkConfig`)
+
+The format is JSON, parsed with the standard library:
+
+```json
+{
+  "comment": "optional, ignored",
+  "bootstrap": ["/dns4/boot.example.org/tcp/4001/p2p/12D3Koo…"],
+  "relays":    ["/ip4/192.0.2.7/udp/4001/quic-v1/p2p/12D3Koo…"]
+}
+```
+
+- **Built-in default.** `default_network.json` is embedded in the binary, and `DefaultNetworkConfigJSON` returns it as
+  a template. **No community nodes are operated yet**, so both lists are empty, and the file says so.
+- **User override.** `LoadNetworkConfig(path)` returns the defaults when the file is missing. A list present in the
+  user file, even `[]`, replaces the built-in list, and a list left out (or `null`) keeps it. That way a user can
+  replace the relays and keep the shipped bootstrap nodes.
+- **Strict parsing.**
+  - Unknown fields and trailing data are errors, to catch typos.
+  - Every entry must be a multiaddr with a dialable address and a final `/p2p/<peer ID>`. Circuit addresses are
+    refused.
+  - Addresses of the same peer are merged, in first-seen order.
+  - Limits: 64 KiB per file and 64 entries per list.
+- **Wiring.** `NetworkConfig.Bootstrap` goes to `DHTOptions.Bootstrap`, and `NetworkConfig.Relays` goes to
+  `NodeOptions.Relays`.
+
+Where the file lives (the daemon's config directory) is for `openaimd` to decide.

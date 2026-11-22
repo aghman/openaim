@@ -274,6 +274,13 @@ func (n *Node) LiveHosts() []host.Host {
 	return hs
 }
 
+// owns reports whether p is one of the node's live hosts.
+func (n *Node) owns(p peer.ID) bool {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return slices.ContainsFunc(n.gens, func(g *generation) bool { return g.h.ID() == p })
+}
+
 // NewStream opens a stream from the current host.
 func (n *Node) NewStream(ctx context.Context, p peer.ID, pids ...protocol.ID) (network.Stream, error) {
 	return n.Host().NewStream(ctx, p, pids...)

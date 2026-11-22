@@ -1,0 +1,5 @@
+{
+  "comment": "OpenAIM bootstrap and relay nodes. NO COMMUNITY NODES ARE OPERATED YET, so both lists are empty: add your own. Each entry is a multiaddr ending in /p2p/<peer ID>. A list you set in your network.json replaces the built-in one; a list you leave out keeps it.",
+  "bootstrap": [],
+  "relays": []
+}
