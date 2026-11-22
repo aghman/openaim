@@ -1100,6 +1100,86 @@ func (x *Rotate) GetSignature() []byte {
 	return nil
 }
 
+// BUDDY_REQUEST (content type 15): asks to become buddies (design §5.4). It
+// travels only in FIRST_CONTACT frames (spec/wire.md §11), which carry the
+// sender's identity key, so it holds no key of its own. A one-fragment mesh
+// request has 87 B of body, and a two-fragment one 229 B.
+type BuddyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DisplayName   string                 `protobuf:"bytes,1,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"` // ≤ 64 bytes
+	Greeting      string                 `protobuf:"bytes,2,opt,name=greeting,proto3" json:"greeting,omitempty"`                          // ≤ 256 bytes
+	Reach         *Reach                 `protobuf:"bytes,3,opt,name=reach,proto3" json:"reach,omitempty"`                                // optional: where to send BUDDY_ACCEPT
+	RecoveryKey   []byte                 `protobuf:"bytes,4,opt,name=recovery_key,json=recoveryKey,proto3" json:"recovery_key,omitempty"` // 32 bytes, or empty: our recovery public key, to pin
+	Caps          *Caps                  `protobuf:"bytes,5,opt,name=caps,proto3" json:"caps,omitempty"`                                  // optional
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BuddyRequest) Reset() {
+	*x = BuddyRequest{}
+	mi := &file_openaim_v1_bodies_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BuddyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BuddyRequest) ProtoMessage() {}
+
+func (x *BuddyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_openaim_v1_bodies_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BuddyRequest.ProtoReflect.Descriptor instead.
+func (*BuddyRequest) Descriptor() ([]byte, []int) {
+	return file_openaim_v1_bodies_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *BuddyRequest) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *BuddyRequest) GetGreeting() string {
+	if x != nil {
+		return x.Greeting
+	}
+	return ""
+}
+
+func (x *BuddyRequest) GetReach() *Reach {
+	if x != nil {
+		return x.Reach
+	}
+	return nil
+}
+
+func (x *BuddyRequest) GetRecoveryKey() []byte {
+	if x != nil {
+		return x.RecoveryKey
+	}
+	return nil
+}
+
+func (x *BuddyRequest) GetCaps() *Caps {
+	if x != nil {
+		return x.Caps
+	}
+	return nil
+}
+
 var File_openaim_v1_bodies_proto protoreflect.FileDescriptor
 
 const file_openaim_v1_bodies_proto_rawDesc = "" +
@@ -1171,7 +1251,13 @@ const file_openaim_v1_bodies_proto_rawDesc = "" +
 	"\aold_key\x18\x01 \x01(\fR\x06oldKey\x12\x17\n" +
 	"\anew_key\x18\x02 \x01(\fR\x06newKey\x12\x1b\n" +
 	"\tissued_at\x18\x03 \x01(\rR\bissuedAt\x12\x1c\n" +
-	"\tsignature\x18\x04 \x01(\fR\tsignature*\x7f\n" +
+	"\tsignature\x18\x04 \x01(\fR\tsignature\"\xbf\x01\n" +
+	"\fBuddyRequest\x12!\n" +
+	"\fdisplay_name\x18\x01 \x01(\tR\vdisplayName\x12\x1a\n" +
+	"\bgreeting\x18\x02 \x01(\tR\bgreeting\x12'\n" +
+	"\x05reach\x18\x03 \x01(\v2\x11.openaim.v1.ReachR\x05reach\x12!\n" +
+	"\frecovery_key\x18\x04 \x01(\fR\vrecoveryKey\x12$\n" +
+	"\x04caps\x18\x05 \x01(\v2\x10.openaim.v1.CapsR\x04caps*\x7f\n" +
 	"\rPresenceState\x12\x1e\n" +
 	"\x1aPRESENCE_STATE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15PRESENCE_STATE_ONLINE\x10\x01\x12\x17\n" +
@@ -1202,26 +1288,27 @@ func file_openaim_v1_bodies_proto_rawDescGZIP() []byte {
 }
 
 var file_openaim_v1_bodies_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_openaim_v1_bodies_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_openaim_v1_bodies_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_openaim_v1_bodies_proto_goTypes = []any{
-	(PresenceState)(0),  // 0: openaim.v1.PresenceState
-	(TypingState)(0),    // 1: openaim.v1.TypingState
-	(Feature)(0),        // 2: openaim.v1.Feature
-	(*Ack)(nil),         // 3: openaim.v1.Ack
-	(*AckEntry)(nil),    // 4: openaim.v1.AckEntry
-	(*Presence)(nil),    // 5: openaim.v1.Presence
-	(*ProfileReq)(nil),  // 6: openaim.v1.ProfileReq
-	(*Profile)(nil),     // 7: openaim.v1.Profile
-	(*AwayMsg)(nil),     // 8: openaim.v1.AwayMsg
-	(*Typing)(nil),      // 9: openaim.v1.Typing
-	(*BuddyAccept)(nil), // 10: openaim.v1.BuddyAccept
-	(*Reach)(nil),       // 11: openaim.v1.Reach
-	(*IPHint)(nil),      // 12: openaim.v1.IPHint
-	(*MeshHint)(nil),    // 13: openaim.v1.MeshHint
-	(*GatewayHint)(nil), // 14: openaim.v1.GatewayHint
-	(*MailboxHint)(nil), // 15: openaim.v1.MailboxHint
-	(*Caps)(nil),        // 16: openaim.v1.Caps
-	(*Rotate)(nil),      // 17: openaim.v1.Rotate
+	(PresenceState)(0),   // 0: openaim.v1.PresenceState
+	(TypingState)(0),     // 1: openaim.v1.TypingState
+	(Feature)(0),         // 2: openaim.v1.Feature
+	(*Ack)(nil),          // 3: openaim.v1.Ack
+	(*AckEntry)(nil),     // 4: openaim.v1.AckEntry
+	(*Presence)(nil),     // 5: openaim.v1.Presence
+	(*ProfileReq)(nil),   // 6: openaim.v1.ProfileReq
+	(*Profile)(nil),      // 7: openaim.v1.Profile
+	(*AwayMsg)(nil),      // 8: openaim.v1.AwayMsg
+	(*Typing)(nil),       // 9: openaim.v1.Typing
+	(*BuddyAccept)(nil),  // 10: openaim.v1.BuddyAccept
+	(*Reach)(nil),        // 11: openaim.v1.Reach
+	(*IPHint)(nil),       // 12: openaim.v1.IPHint
+	(*MeshHint)(nil),     // 13: openaim.v1.MeshHint
+	(*GatewayHint)(nil),  // 14: openaim.v1.GatewayHint
+	(*MailboxHint)(nil),  // 15: openaim.v1.MailboxHint
+	(*Caps)(nil),         // 16: openaim.v1.Caps
+	(*Rotate)(nil),       // 17: openaim.v1.Rotate
+	(*BuddyRequest)(nil), // 18: openaim.v1.BuddyRequest
 }
 var file_openaim_v1_bodies_proto_depIdxs = []int32{
 	4,  // 0: openaim.v1.Ack.entries:type_name -> openaim.v1.AckEntry
@@ -1233,11 +1320,13 @@ var file_openaim_v1_bodies_proto_depIdxs = []int32{
 	13, // 6: openaim.v1.Reach.mesh:type_name -> openaim.v1.MeshHint
 	14, // 7: openaim.v1.Reach.gateway:type_name -> openaim.v1.GatewayHint
 	15, // 8: openaim.v1.Reach.mailbox:type_name -> openaim.v1.MailboxHint
-	9,  // [9:9] is the sub-list for method output_type
-	9,  // [9:9] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	11, // 9: openaim.v1.BuddyRequest.reach:type_name -> openaim.v1.Reach
+	16, // 10: openaim.v1.BuddyRequest.caps:type_name -> openaim.v1.Caps
+	11, // [11:11] is the sub-list for method output_type
+	11, // [11:11] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_openaim_v1_bodies_proto_init() }
@@ -1251,7 +1340,7 @@ func file_openaim_v1_bodies_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_openaim_v1_bodies_proto_rawDesc), len(file_openaim_v1_bodies_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   15,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -24,12 +24,15 @@ const (
 	Reach       ContentType = 12
 	Caps        ContentType = 13
 	Rotate      ContentType = 14
+	// BuddyRequest travels only in FIRST_CONTACT frames (spec/wire.md §11.6).
+	BuddyRequest ContentType = 15
 )
 
 var contentNames = map[ContentType]string{
 	IM: "IM", Ack: "ACK", Presence: "PRESENCE", ProfileReq: "PROFILE_REQ", Profile: "PROFILE",
 	AwayMsg: "AWAY_MSG", Typing: "TYPING", RoomMsg: "ROOM_MSG", RoomInvite: "ROOM_INVITE",
 	RoomRekey: "ROOM_REKEY", BuddyAccept: "BUDDY_ACCEPT", Reach: "REACH", Caps: "CAPS", Rotate: "ROTATE",
+	BuddyRequest: "BUDDY_REQUEST",
 }
 
 func (c ContentType) String() string {

@@ -22,11 +22,15 @@ const (
 	// KindDataIP is a DATA frame in the IP-only layout (larger fragments). It
 	// can never be routed to mesh.
 	KindDataIP Kind = 2
-	// Reserved for later in M1/M2 (spec/wire.md §3).
+	// KindFirstContact is a FIRST_CONTACT frame in the mesh layout
+	// (spec/wire.md §11): a request from someone who isn't a buddy yet.
 	KindFirstContact Kind = 3
-	KindBeacon       Kind = 4
-	KindNearby       Kind = 5
-	KindGatewayAd    Kind = 6
+	// Reserved for later in M1/M2 (spec/wire.md §3).
+	KindBeacon    Kind = 4
+	KindNearby    Kind = 5
+	KindGatewayAd Kind = 6
+	// KindFirstContactIP is a FIRST_CONTACT frame in the IP-only layout.
+	KindFirstContactIP Kind = 7
 )
 
 // VerKind packs the version and kind into the first frame byte.

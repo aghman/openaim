@@ -142,3 +142,15 @@ message Rotate {
   uint32 issued_at = 3; // seconds since the OpenAIM epoch
   bytes signature = 4;  // 64 bytes
 }
+
+// BUDDY_REQUEST (content type 15): asks to become buddies (design §5.4). It
+// travels only in FIRST_CONTACT frames (spec/wire.md §11), which carry the
+// sender's identity key, so it holds no key of its own. A one-fragment mesh
+// request has 87 B of body, and a two-fragment one 229 B.
+message BuddyRequest {
+  string display_name = 1; // ≤ 64 bytes
+  string greeting = 2;     // ≤ 256 bytes
+  Reach reach = 3;         // optional: where to send BUDDY_ACCEPT
+  bytes recovery_key = 4;  // 32 bytes, or empty: our recovery public key, to pin
+  Caps caps = 5;           // optional
+}

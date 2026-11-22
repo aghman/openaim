@@ -22,6 +22,7 @@ const (
 	MaxAckEntries   = 32
 	MaxDisplayName  = 64
 	MaxText         = 1024
+	MaxGreeting     = 256
 	MaxUserAgent    = 64
 	MaxIPHints      = 4
 	MaxAddrs        = 8
@@ -40,16 +41,17 @@ func invalid(format string, args ...any) error {
 
 // contentTypes maps each protobuf body to its content type.
 var contentTypes = map[frame.ContentType]func() proto.Message{
-	frame.Ack:         func() proto.Message { return &pb.Ack{} },
-	frame.Presence:    func() proto.Message { return &pb.Presence{} },
-	frame.ProfileReq:  func() proto.Message { return &pb.ProfileReq{} },
-	frame.Profile:     func() proto.Message { return &pb.Profile{} },
-	frame.AwayMsg:     func() proto.Message { return &pb.AwayMsg{} },
-	frame.Typing:      func() proto.Message { return &pb.Typing{} },
-	frame.BuddyAccept: func() proto.Message { return &pb.BuddyAccept{} },
-	frame.Reach:       func() proto.Message { return &pb.Reach{} },
-	frame.Caps:        func() proto.Message { return &pb.Caps{} },
-	frame.Rotate:      func() proto.Message { return &pb.Rotate{} },
+	frame.Ack:          func() proto.Message { return &pb.Ack{} },
+	frame.Presence:     func() proto.Message { return &pb.Presence{} },
+	frame.ProfileReq:   func() proto.Message { return &pb.ProfileReq{} },
+	frame.Profile:      func() proto.Message { return &pb.Profile{} },
+	frame.AwayMsg:      func() proto.Message { return &pb.AwayMsg{} },
+	frame.Typing:       func() proto.Message { return &pb.Typing{} },
+	frame.BuddyAccept:  func() proto.Message { return &pb.BuddyAccept{} },
+	frame.Reach:        func() proto.Message { return &pb.Reach{} },
+	frame.Caps:         func() proto.Message { return &pb.Caps{} },
+	frame.Rotate:       func() proto.Message { return &pb.Rotate{} },
+	frame.BuddyRequest: func() proto.Message { return &pb.BuddyRequest{} },
 }
 
 // ContentTypeOf returns the content type a body message travels as.
@@ -75,6 +77,8 @@ func ContentTypeOf(m proto.Message) (frame.ContentType, error) {
 		return frame.Caps, nil
 	case *pb.Rotate:
 		return frame.Rotate, nil
+	case *pb.BuddyRequest:
+		return frame.BuddyRequest, nil
 	}
 	return 0, fmt.Errorf("body: %T is not a body message", m)
 }
@@ -169,22 +173,24 @@ func Validate(m proto.Message) error {
 		if len(v.GetPresenceKey()) != 32 {
 			return invalid("presence key of %d bytes", len(v.GetPresenceKey()))
 		}
-		if rk := v.GetRecoveryKey(); len(rk) != 0 {
-			if _, err := identity.ParsePublicKey(rk); err != nil {
-				return invalid("recovery key: %v", err)
-			}
+		if err := recoveryKey(v.GetRecoveryKey()); err != nil {
+			return err
 		}
 		if err := text("display name", v.GetDisplayName(), MaxDisplayName); err != nil {
 			return err
 		}
-		if v.Reach != nil {
-			if err := Validate(v.Reach); err != nil {
-				return err
-			}
+		return reachAndCaps(v.Reach, v.Caps)
+	case *pb.BuddyRequest:
+		if err := text("display name", v.GetDisplayName(), MaxDisplayName); err != nil {
+			return err
 		}
-		if v.Caps != nil {
-			return Validate(v.Caps)
+		if err := text("greeting", v.GetGreeting(), MaxGreeting); err != nil {
+			return err
 		}
+		if err := recoveryKey(v.GetRecoveryKey()); err != nil {
+			return err
+		}
+		return reachAndCaps(v.Reach, v.Caps)
 	case *pb.Reach:
 		return validateReach(v)
 	case *pb.Caps:
@@ -206,6 +212,32 @@ func Validate(m proto.Message) error {
 		}
 	default:
 		return fmt.Errorf("body: %T is not a body message", m)
+	}
+	return nil
+}
+
+// recoveryKey checks an optional recovery key: empty, or a valid identity
+// key (spec/wire.md §4.2).
+func recoveryKey(rk []byte) error {
+	if len(rk) == 0 {
+		return nil
+	}
+	if _, err := identity.ParsePublicKey(rk); err != nil {
+		return invalid("recovery key: %v", err)
+	}
+	return nil
+}
+
+// reachAndCaps checks the optional REACH and CAPS a request or accept
+// carries.
+func reachAndCaps(r *pb.Reach, c *pb.Caps) error {
+	if r != nil {
+		if err := Validate(r); err != nil {
+			return err
+		}
+	}
+	if c != nil {
+		return Validate(c)
 	}
 	return nil
 }

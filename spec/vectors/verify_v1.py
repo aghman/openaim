@@ -2,8 +2,9 @@
 """Independent check of spec/vectors/v1.json's key schedule.
 
 Uses only the Python standard library and a textbook RFC 7748 X25519, so it
-shares no code with the Go implementation. It recomputes everything except
-Ed25519 key generation and the ChaCha20-Poly1305 frames.
+shares no code with the Go implementation. It recomputes everything,
+including the FIRST_CONTACT key schedule and headers (spec §11), except
+Ed25519 key generation and the ChaCha20-Poly1305 ciphertexts.
 
     python3 -I spec/vectors/verify_v1.py spec/vectors/v1.json
 """
@@ -111,6 +112,55 @@ def main(path: str) -> int:
         for i, f in enumerate(h(x) for x in m["frames"]):
             hdr = bytes([1 << 5 | {1: 1, 2: 2}[layout]]) + tag + msg_id + bytes([i << 4 | (len(m["frames"]) - 1)])
             check(f"{m['name']} frame {i} header", f[:18], hdr)
+
+    # FIRST_CONTACT (spec §11): Alice to Bob, recomputed from both sides.
+    b_scalar = hashlib.sha512(h(v["bob_seed"])).digest()[:32]
+    a_x, b_x = h(v["alice_x25519"]), h(v["bob_x25519"])
+    fc = b"openaim/v1/first-contact"
+    layouts = {"mesh": (1, 3, 200, 2), "ip": (2, 7, 4096, 1)}  # layout byte, kind, frame size, max fragments
+    for c in v["first_contacts"]:
+        n = c["name"]
+        layout, kind, frame_len, max_frags = layouts[c["layout"]]
+        e = x25519(h(c["ephemeral_seed"]), (9).to_bytes(32, "little"))
+        check(n + " e", e, h(c["e"]))
+        check(n + " e canonical", e[31] < 0x80 and int.from_bytes(e, "little") < P, True)
+        es = x25519(h(c["ephemeral_seed"]), b_x)
+        check(n + " es (sender)", es, h(c["es"]))
+        check(n + " es (recipient)", x25519(b_scalar, e), h(c["es"]))
+        ss = x25519(a_scalar, b_x)
+        check(n + " ss (sender)", ss, h(c["ss"]))
+        check(n + " ss (recipient)", x25519(b_scalar, a_x), h(c["ss"]))
+        h_r = hashlib.sha256(fc + b_ed).digest()
+        check(n + " h_r", h_r, h(c["h_r"]))
+        ck1 = hkdf_expand(hkdf_extract(h_r, es), fc + b"/es" + e)
+        check(n + " ck1", ck1, h(c["ck1"]))
+        ck2 = hkdf_expand(hkdf_extract(ck1, ss), fc + b"/ss" + a_ed)
+        check(n + " ck2", ck2, h(c["ck2"]))
+        k_siv = hkdf_expand(ck2, fc + b"/siv")
+        check(n + " k_siv", k_siv, h(c["k_siv"]))
+        inner = h(c["inner"])
+        check(n + " inner header", (inner[0], int.from_bytes(inner[2:6], "big")), (15, c["timestamp"]))
+        msg_id = hmac.new(k_siv, inner, hashlib.sha256).digest()[:8]
+        check(n + " msg_id", msg_id, h(c["msg_id"]))
+
+        cap0, cap1 = frame_len - 106, frame_len - 58
+        count = 1 if len(inner) <= cap0 else 1 + -(-(len(inner) - cap0) // cap1)
+        frames = [h(x) for x in c["frames"]]
+        check(n + " fragment count", (len(frames), len(frames) <= max_frags), (count, True))
+        info = lambda label: fc + label + msg_id + bytes([count, layout])
+        check(n + " k_s", hkdf_expand(ck1, info(b"/s")), h(c["k_s"]))
+        check(n + " k_payload", hkdf_expand(ck2, info(b"/payload")), h(c["k_payload"]))
+        if count > 1:
+            check(n + " k_tail", hkdf_expand(ck1, info(b"/tail")), h(c["k_tail"]))
+        check(n + " dedup_tag", hashlib.sha256(fc + b"/dedup" + e).digest()[:8], h(c["dedup_tag"]))
+        for i, f in enumerate(frames):
+            hdr = bytes([1 << 5 | kind]) + e + msg_id + bytes([i << 4 | (count - 1)])
+            check(f"{n} frame {i} header", f[:42], hdr)
+            start = 0 if i == 0 else cap0 + (i - 1) * cap1
+            chunk = len(inner[start:start + (cap0 if i == 0 else cap1)])
+            check(f"{n} frame {i} length", len(f), 42 + (48 if i == 0 else 0) + chunk + 16)
+            leaks = [k for k in (a_ed, b_ed, a_x, b_x) if any(k[j:j + 8] in f for j in range(25))]
+            check(f"{n} frame {i} hides keys", leaks, [])
 
     bad = [n for n, ok in checks if not ok]
     print(f"{len(checks) - len(bad)}/{len(checks)} checks passed")

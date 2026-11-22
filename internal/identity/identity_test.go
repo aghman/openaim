@@ -2,6 +2,7 @@ package identity
 
 import (
 	"bytes"
+	"crypto/ecdh"
 	"errors"
 	"regexp"
 	"testing"
@@ -124,5 +125,33 @@ func TestKeyStrings(t *testing.T) {
 	}
 	if !regexp.MustCompile(`^~[a-z2-7]{4}$`).MatchString(pk.KeyID()) {
 		t.Fatalf("bad key ID %q", pk.KeyID())
+	}
+}
+
+// DH agrees with an ephemeral key's own ECDH, and refuses small-order
+// points (spec/wire.md §4.2).
+func TestDH(t *testing.T) {
+	id := mustID(t, 1)
+	e, err := ecdh.X25519().NewPrivateKey(bytes.Repeat([]byte{7}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mine, err := id.DH(e.PublicKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	x, _ := id.Public().X25519()
+	theirs, _ := e.ECDH(x)
+	if !bytes.Equal(mine, theirs) {
+		t.Fatal("DH disagrees with the ephemeral side")
+	}
+	for _, u := range [][]byte{make([]byte, 32), append([]byte{1}, make([]byte, 31)...)} {
+		p, _ := ecdh.X25519().NewPublicKey(u)
+		if _, err := id.DH(p); err == nil {
+			t.Errorf("DH accepted small-order point %x", u[:1])
+		}
+	}
+	if _, err := id.DH(nil); err == nil {
+		t.Error("DH accepted nil")
 	}
 }

@@ -2,7 +2,10 @@ package body
 
 import (
 	"bytes"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -49,7 +52,16 @@ func examples(t testing.TB) []proto.Message {
 		realisticReach(t),
 		&pb.Caps{WireVersion: 1, UserAgent: "openaim/0.1"},
 		&pb.Rotate{OldKey: idKey(t, 1), NewKey: idKey(t, 2), IssuedAt: 5, Signature: make([]byte, 64)},
+		&pb.BuddyRequest{DisplayName: "SkaterDude99", Greeting: "hey, it's jen from the meetup!", Reach: meshReach(),
+			RecoveryKey: idKey(t, 3), Caps: &pb.Caps{WireVersion: 1}},
 	}
+}
+
+// meshReach is a REACH with only a mesh node, as a mesh-only requester
+// sends, issued in late 2026 and valid for the 14-day window.
+func meshReach() *pb.Reach {
+	const issued = 59_918_400
+	return &pb.Reach{Seq: 1, IssuedAt: issued, ExpiresAt: issued + 14*86400, Mesh: &pb.MeshHint{NodeNum: 0x0a0b0c0d}}
 }
 
 func TestRoundTrip(t *testing.T) {
@@ -150,6 +162,12 @@ func TestValidation(t *testing.T) {
 		"rotate to same key":  &pb.Rotate{OldKey: key, NewKey: key, Signature: make([]byte, 64)},
 		"rotate, short sig":   &pb.Rotate{OldKey: key, NewKey: idKey(t, 2), Signature: make([]byte, 63)},
 		"rotate, bad new key": &pb.Rotate{OldKey: key, NewKey: make([]byte, 32), Signature: make([]byte, 64)},
+		"request, long name":  &pb.BuddyRequest{DisplayName: strings.Repeat("x", MaxDisplayName+1)},
+		"request, long greet": &pb.BuddyRequest{Greeting: strings.Repeat("x", MaxGreeting+1)},
+		"request, CSI greet":  &pb.BuddyRequest{Greeting: "hi\u009b2J"},
+		"request, bad rk":     &pb.BuddyRequest{RecoveryKey: make([]byte, 31)},
+		"request, bad reach":  &pb.BuddyRequest{Reach: &pb.Reach{}},
+		"request, bad caps":   &pb.BuddyRequest{Caps: &pb.Caps{}},
 	} {
 		if _, _, err := Marshal(m); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: Marshal err = %v, want ErrInvalid", name, err)
@@ -159,6 +177,76 @@ func TestValidation(t *testing.T) {
 		b, _ := proto.Marshal(m)
 		if _, err := Unmarshal(ct, b); err == nil {
 			t.Errorf("%s: Unmarshal accepted it", name)
+		}
+	}
+}
+
+// TestFirstContactBudgets checks that buddy requests fit FIRST_CONTACT
+// frames (spec/wire.md §11.1, §11.6): 87 B of body in one mesh fragment,
+// 229 B in two, 3983 B in one IP fragment.
+func TestFirstContactBudgets(t *testing.T) {
+	hdr := len(frame.Inner{Type: frame.BuddyRequest}.Marshal())
+	oneFrag := frame.FirstContactCapacity(frame.LayoutMesh, 0) - hdr
+	twoFrags := frame.FirstContactMaxInner(frame.LayoutMesh) - hdr
+	ip := frame.FirstContactMaxInner(frame.LayoutIP) - hdr
+	if oneFrag != 87 || twoFrags != 229 || ip != 3983 {
+		t.Fatalf("budgets %d / %d / %d", oneFrag, twoFrags, ip)
+	}
+	manyHints := realisticReach(t)
+	for range 3 {
+		manyHints.Ip = append(manyHints.Ip, manyHints.Ip[0])
+	}
+	for _, c := range []struct {
+		name  string
+		m     *pb.BuddyRequest
+		limit int
+	}{
+		{"mesh, typical", &pb.BuddyRequest{DisplayName: "SkaterDude99", Greeting: "hey, it's jen from the meetup!", Reach: meshReach()}, oneFrag},
+		{"mesh, long greeting", &pb.BuddyRequest{DisplayName: "SkaterDude99", Greeting: strings.Repeat("g", 140), Reach: meshReach()}, twoFrags},
+		{"mesh, max name", &pb.BuddyRequest{DisplayName: strings.Repeat("n", MaxDisplayName), Greeting: strings.Repeat("g", 120), Reach: meshReach()}, twoFrags},
+		{"IP, with recovery key", &pb.BuddyRequest{DisplayName: "SkaterDude99", Greeting: strings.Repeat("g", 60), Reach: realisticReach(t),
+			RecoveryKey: idKey(t, 3), Caps: &pb.Caps{WireVersion: 1, Features: 0xF}}, twoFrags},
+		{"IP, everything", &pb.BuddyRequest{DisplayName: strings.Repeat("n", MaxDisplayName), Greeting: strings.Repeat("g", MaxGreeting),
+			Reach: manyHints, RecoveryKey: idKey(t, 3), Caps: &pb.Caps{WireVersion: 1, Features: 0xF, UserAgent: strings.Repeat("u", MaxUserAgent)}}, ip},
+	} {
+		_, b, err := Marshal(c.m)
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if len(b) > c.limit {
+			t.Errorf("%s: %d bytes, budget %d", c.name, len(b), c.limit)
+		} else {
+			t.Logf("%-22s %4d B (budget %d)", c.name, len(b), c.limit)
+		}
+	}
+}
+
+// The golden first-contact vectors carry valid BUDDY_REQUEST bodies.
+func TestFirstContactVectorBodies(t *testing.T) {
+	raw, err := os.ReadFile("../../spec/vectors/v1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var v struct {
+		FirstContacts []struct {
+			Name  string `json:"name"`
+			Inner string `json:"inner"`
+		} `json:"first_contacts"`
+	}
+	if err := json.Unmarshal(raw, &v); err != nil {
+		t.Fatal(err)
+	}
+	if len(v.FirstContacts) == 0 {
+		t.Fatal("no first-contact vectors")
+	}
+	for _, fc := range v.FirstContacts {
+		b, _ := hex.DecodeString(fc.Inner)
+		in, err := frame.ParseInner(b)
+		if err != nil || in.Type != frame.BuddyRequest {
+			t.Fatalf("%s: inner %v, type %v", fc.Name, err, in.Type)
+		}
+		if _, err := Unmarshal(in.Type, in.Body); err != nil {
+			t.Errorf("%s: %v", fc.Name, err)
 		}
 	}
 }

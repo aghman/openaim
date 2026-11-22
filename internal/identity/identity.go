@@ -147,6 +147,21 @@ func Verify(pk PublicKey, label string, msg, sig []byte) bool {
 	return ed25519.Verify(pk[:], append([]byte(label), msg...), sig)
 }
 
+// DH returns X25519(identity scalar, pub), the static Diffie-Hellman output
+// used by first contact (spec/wire.md §11). It fails on an all-zero result,
+// which is what a small-order pub produces (§4.2). The private scalar never
+// leaves the Identity; callers must feed the output through a KDF.
+func (id *Identity) DH(pub *ecdh.PublicKey) ([]byte, error) {
+	if pub == nil {
+		return nil, errors.New("identity: nil DH public key")
+	}
+	shared, err := id.x.ECDH(pub) // crypto/ecdh rejects an all-zero output
+	if err != nil {
+		return nil, fmt.Errorf("identity: %w", err)
+	}
+	return shared, nil
+}
+
 // Pair holds the pairwise keys between an identity and one buddy (design
 // §8.2): one directional key each way.
 type Pair struct {

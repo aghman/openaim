@@ -2,6 +2,8 @@ package frame
 
 import (
 	"bytes"
+	"crypto/ecdh"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -43,6 +45,8 @@ type Vectors struct {
 	ConvTag string `json:"conv_tag_alice_to_bob"`
 
 	Messages []MessageVector `json:"messages"`
+
+	FirstContacts []FirstContactVector `json:"first_contacts"`
 }
 
 // MessageVector is one message Alice seals to Bob.
@@ -58,6 +62,88 @@ type MessageVector struct {
 	MsgID   string   `json:"msg_id"`
 	KMsg    string   `json:"k_msg"`
 	Frames  []string `json:"frames"`
+}
+
+// FirstContactVector is one first contact Alice seals to Bob (spec/wire.md
+// §11). The ephemeral seed stands in for the sender's randomness.
+type FirstContactVector struct {
+	Name     string   `json:"name"`
+	Layout   string   `json:"layout"`
+	ESeed    string   `json:"ephemeral_seed"`
+	E        string   `json:"e"`
+	ES       string   `json:"es"`
+	SS       string   `json:"ss"`
+	HR       string   `json:"h_r"`
+	CK1      string   `json:"ck1"`
+	CK2      string   `json:"ck2"`
+	KSiv     string   `json:"k_siv"`
+	Type     uint8    `json:"content_type"`
+	Time     uint32   `json:"timestamp"`
+	Inner    string   `json:"inner"`
+	MsgID    string   `json:"msg_id"`
+	KS       string   `json:"k_s"`
+	KPayload string   `json:"k_payload"`
+	KTail    string   `json:"k_tail,omitempty"`
+	DedupTag string   `json:"dedup_tag"`
+	Frames   []string `json:"frames"`
+}
+
+// buddyRequest hand-encodes a BUDDY_REQUEST body (display_name = 1,
+// greeting = 2), since internal/frame doesn't import internal/body.
+// Strings must be under 128 bytes.
+func buddyRequest(name, greeting string) []byte {
+	b := append([]byte{1<<3 | 2, byte(len(name))}, name...)
+	return append(append(b, 2<<3|2, byte(len(greeting))), greeting...)
+}
+
+func buildFirstContacts(t *testing.T, alice *identity.Identity, bob identity.PublicKey, at time.Time) []FirstContactVector {
+	t.Helper()
+	bx, _ := bob.X25519()
+	var out []FirstContactVector
+	for _, c := range []struct {
+		name   string
+		layout Layout
+		eb     byte
+		body   []byte
+	}{
+		{"one-fragment mesh request", LayoutMesh, 0xE1, buddyRequest("Alice", "hi bob, it's alice from the meetup")},
+		{"two-fragment mesh request", LayoutMesh, 0xE2, buddyRequest("Alice",
+			"hi bob! it's alice, we met at the radio club on saturday. you said to add you here, so here I am. talk soon?")},
+		{"IP-layout request", LayoutIP, 0xE3, buddyRequest("Alice", "hello over IP")},
+	} {
+		in := Inner{Type: BuddyRequest, Time: Timestamp(at) + 20, Body: c.body}
+		inner := in.Marshal()
+		eSeed := bytes.Repeat([]byte{c.eb}, 32)
+		s, err := SealFirstContact(alice, bob, c.layout, inner, bytes.NewReader(eSeed))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ePriv, _ := ecdh.X25519().NewPrivateKey(eSeed)
+		es, _ := ePriv.ECDH(bx)
+		ss, _ := alice.DH(bx)
+		hR := sha256.Sum256(append([]byte(labelFC), bob[:]...))
+		ck1 := fcCK1(bob, s.E[:], es)
+		ck2 := fcCK2(ck1, ss, alice.Public())
+		n := len(s.Frames)
+		dt := fcDedupTag(s.E)
+		v := FirstContactVector{
+			Name: c.name, Layout: c.layout.String(), ESeed: hex.EncodeToString(eSeed), E: hex.EncodeToString(s.E[:]),
+			ES: hex.EncodeToString(es), SS: hex.EncodeToString(ss), HR: hex.EncodeToString(hR[:]),
+			CK1: hex.EncodeToString(ck1), CK2: hex.EncodeToString(ck2), KSiv: hex.EncodeToString(fcSIV(ck2)),
+			Type: uint8(in.Type), Time: in.Time, Inner: hex.EncodeToString(inner), MsgID: hex.EncodeToString(s.MsgID[:]),
+			KS:       hex.EncodeToString(fcKey(ck1, labelFCEncS, s.MsgID, n, c.layout)),
+			KPayload: hex.EncodeToString(fcKey(ck2, labelFCPayload, s.MsgID, n, c.layout)),
+			DedupTag: hex.EncodeToString(dt[:]),
+		}
+		if n > 1 {
+			v.KTail = hex.EncodeToString(fcKey(ck1, labelFCTail, s.MsgID, n, c.layout))
+		}
+		for _, f := range s.Frames {
+			v.Frames = append(v.Frames, hex.EncodeToString(f))
+		}
+		out = append(out, v)
+	}
+	return out
 }
 
 func buildVectors(t *testing.T) Vectors {
@@ -123,6 +209,7 @@ func buildVectors(t *testing.T) Vectors {
 		}
 		v.Messages = append(v.Messages, mv)
 	}
+	v.FirstContacts = buildFirstContacts(t, alice, bp, at)
 	return v
 }
 
@@ -176,6 +263,22 @@ func TestGoldenVectors(t *testing.T) {
 		}
 		if res.Status != Delivered || string(res.Message.Inner.Body) != m.BodyStr {
 			t.Fatalf("%s: status %v", m.Name, res.Status)
+		}
+	}
+
+	// Bob opens Alice's first contacts, last fragment first.
+	for _, fc := range v.FirstContacts {
+		fr := &FirstContactReceiver{Me: bob, Dedup: &MemDedup{}, Now: func() time.Time { return TimeOf(fc.Time) }}
+		var res FirstContactResult
+		for i := len(fc.Frames) - 1; i >= 0; i-- {
+			f, _ := hex.DecodeString(fc.Frames[i])
+			if res, err = fr.Accept(f); err != nil {
+				t.Fatalf("%s: %v", fc.Name, err)
+			}
+		}
+		inner, _ := hex.DecodeString(fc.Inner)
+		if res.Status != Delivered || res.Message.Sender != ak || !bytes.Equal(res.Message.Inner.Marshal(), inner) {
+			t.Fatalf("%s: status %v", fc.Name, res.Status)
 		}
 	}
 }
