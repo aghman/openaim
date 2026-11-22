@@ -27,8 +27,15 @@ import (
 
 // Config says how to open a node.
 type Config struct {
-	DataDir    string
-	Passphrase []byte // unlocks the keystore
+	DataDir string
+	// Keystore must name the keystore Init used, or be KeystoreModeDefault or
+	// KeystoreModeAuto to accept the recorded one; a different one fails with
+	// ErrKeystoreMismatch.
+	Keystore KeystoreMode
+	// Passphrase unlocks a file keystore. If it is empty, PassphraseFunc is
+	// asked instead, and only when the identity uses the file keystore.
+	Passphrase     []byte
+	PassphraseFunc func() ([]byte, error)
 	// KeystoreParams are the Argon2id costs for files the daemon writes
 	// (backups); zero means keystore.DefaultParams.
 	KeystoreParams keystore.Params
@@ -90,8 +97,9 @@ type Node struct {
 // Open takes the data directory's lock, opens the database and unlocks the
 // identity. It fails with ErrLocked if another daemon has the directory,
 // ErrNotInitialized if there is no identity yet, ErrIdentityMismatch if the
-// keystore and the database disagree, and keystore.ErrWrongPassphrase for a
-// wrong passphrase.
+// keystore and the database disagree, ErrKeystoreMismatch if cfg.Keystore
+// names a different keystore than Init used, and keystore.ErrWrongPassphrase
+// for a wrong passphrase.
 func Open(ctx context.Context, cfg Config) (_ *Node, err error) {
 	p := PathsFor(cfg.DataDir)
 	if err := prepareDir(p.Dir); err != nil {
@@ -118,7 +126,17 @@ func Open(ctx context.Context, cfg Config) (_ *Node, err error) {
 	if n.store, err = store.Open(ctx, p.DB); err != nil {
 		return nil, err
 	}
-	ks := &keystore.FileKeystore{Path: p.Keystore, Passphrase: cfg.Passphrase}
+	kind, err := recordedKeystore(ctx, n.store)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkKeystoreMode(cfg.Keystore, kind); err != nil {
+		return nil, err
+	}
+	ks, err := newKeystore(kind, p, cfg.Passphrase, cfg.PassphraseFunc, cfg.KeystoreParams)
+	if err != nil {
+		return nil, err
+	}
 	seed, err := ks.Load()
 	if errors.Is(err, keystore.ErrNoKey) {
 		return nil, ErrNotInitialized

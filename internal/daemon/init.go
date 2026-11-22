@@ -25,8 +25,16 @@ var (
 
 // InitConfig says how to create an identity.
 type InitConfig struct {
-	DataDir    string
-	Passphrase []byte // encrypts the keystore; must not be empty
+	DataDir string
+	// Keystore is where to keep the seed. KeystoreModeDefault is the file;
+	// KeystoreModeAuto is the keychain if one answers, else the file. The
+	// choice is recorded, and Open insists on the same one.
+	Keystore KeystoreMode
+	// Passphrase encrypts a file keystore. If it is empty, PassphraseFunc
+	// is asked instead, and only when the file keystore is used. A
+	// keychain keystore needs neither.
+	Passphrase     []byte
+	PassphraseFunc func() ([]byte, error)
 	// Phrase, if set, restores the identity from its recovery phrase
 	// instead of generating a new one.
 	Phrase string
@@ -43,11 +51,14 @@ type InitConfig struct {
 // The caller shows the new identity's recovery phrase (id.Phrase()) to the
 // user, once.
 func Init(ctx context.Context, cfg InitConfig) (*identity.Identity, error) {
-	if len(cfg.Passphrase) == 0 {
+	kind, err := ResolveKeystoreMode(cfg.Keystore)
+	if err != nil {
+		return nil, err
+	}
+	if kind == KeystoreModeFile && len(cfg.Passphrase) == 0 && cfg.PassphraseFunc == nil {
 		return nil, keystore.ErrEmptyPassphrase
 	}
 	var id *identity.Identity
-	var err error
 	if cfg.Phrase != "" {
 		id, err = identity.FromPhrase(cfg.Phrase)
 	} else {
@@ -91,10 +102,27 @@ func Init(ctx context.Context, cfg InitConfig) (*identity.Identity, error) {
 		return nil, err
 	}
 
-	// Keystore first: if we die before the meta write, Open adopts the
-	// keystore's identity (it has the secret), rather than leaving a
-	// database that names an identity nobody holds.
-	ks := &keystore.FileKeystore{Path: p.Keystore, Passphrase: cfg.Passphrase, Params: cfg.KeystoreParams}
+	ks, err := newKeystore(kind, p, cfg.Passphrase, cfg.PassphraseFunc, cfg.KeystoreParams)
+	if err != nil {
+		return nil, err
+	}
+	if kind == KeystoreModeKeychain {
+		// Never overwrite a seed: the keychain item outlives the data dir.
+		switch _, err := ks.Load(); {
+		case err == nil:
+			return nil, fmt.Errorf("%w (the OS keychain already holds an identity for %s)", ErrAlreadyInitialized, p.Dir)
+		case !errors.Is(err, keystore.ErrNoKey):
+			return nil, err
+		}
+	}
+
+	// Record the keystore kind, then save the seed, then the identity. If
+	// we die before the identity is recorded, Open adopts the keystore's
+	// identity (it has the secret), rather than leaving a database that
+	// names an identity nobody holds.
+	if err := st.SetMeta(ctx, metaKeystore, []byte(kind)); err != nil {
+		return nil, err
+	}
 	if err := ks.Save(id.Seed()); err != nil {
 		return nil, err
 	}

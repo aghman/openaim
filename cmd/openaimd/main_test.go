@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zalando/go-keyring"
+
 	"github.com/aghman/openaim/internal/api"
 	pb "github.com/aghman/openaim/internal/apipb"
 	"github.com/aghman/openaim/internal/daemon"
@@ -145,5 +147,69 @@ func TestRunErrors(t *testing.T) {
 	}
 	if r := runCmd(ctx, "", nil, "version"); r.code != 0 || !strings.HasPrefix(r.stdout, "openaimd ") {
 		t.Fatalf("version: %+v", r)
+	}
+}
+
+func TestKeychainInitRun(t *testing.T) {
+	keyring.MockInit() // never the real keychain
+	ctx := context.Background()
+	dir := filepath.Join(shortDir(t), "k")
+
+	if r := runCmd(ctx, "", nil, "init", "--data-dir", dir, "--keystore", "vault"); r.code != 1 || !strings.Contains(r.stderr, "--keystore") {
+		t.Fatalf("bad mode: %+v", r)
+	}
+	// No passphrase source at all: the keychain doesn't need one.
+	r := runCmd(ctx, "", nil, "init", "--data-dir", dir, "--keystore", "keychain")
+	if r.code != 0 || !strings.Contains(r.stdout, "keystore: OS keychain") {
+		t.Fatalf("keychain init: %+v", r)
+	}
+	key := keyRE.FindStringSubmatch(r.stdout)[1]
+	if _, err := os.Stat(daemon.PathsFor(dir).Keystore); !os.IsNotExist(err) {
+		t.Fatalf("keystore file written: %v", err)
+	}
+
+	// Asking run for the file keystore is refused.
+	if r := runCmd(ctx, "", map[string]string{EnvPassphrase: "x"}, "run", "--data-dir", dir, "--keystore", "file"); r.code != 1 || !strings.Contains(r.stderr, "keystore") {
+		t.Fatalf("mismatched run: %+v", r)
+	}
+
+	// Plain run uses the keychain, with no passphrase.
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan result, 1)
+	go func() { done <- runCmd(runCtx, "", nil, "run", "--data-dir", dir) }()
+	sock := daemon.PathsFor(dir).Socket
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+		if _, err := os.Lstat(sock); err == nil {
+			break
+		} else if time.Now().After(deadline) {
+			cancel()
+			t.Fatalf("socket never appeared: %+v", <-done)
+		}
+	}
+	conn, err := api.Dial(sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	st, err := pb.NewDaemonClient(conn).GetStatus(ctx, &pb.GetStatusRequest{})
+	if err != nil || st.GetIdentityKey() != key {
+		t.Fatalf("status %v %v", st, err)
+	}
+	cancel()
+	if r := <-done; r.code != 0 {
+		t.Fatalf("run exited %d: %s", r.code, r.stderr)
+	}
+
+	// A file-keystore identity refuses --keystore=keychain.
+	passFile := filepath.Join(shortDir(t), "pass")
+	if err := os.WriteFile(passFile, []byte("pw\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dir2 := filepath.Join(shortDir(t), "f")
+	if r := runCmd(ctx, "", nil, "init", "--data-dir", dir2, "--passphrase-file", passFile); r.code != 0 || !strings.Contains(r.stdout, "keystore: passphrase-encrypted file") {
+		t.Fatalf("file init: %+v", r)
+	}
+	if r := runCmd(ctx, "", nil, "run", "--data-dir", dir2, "--keystore", "keychain"); r.code != 1 || !strings.Contains(r.stderr, "keystore") {
+		t.Fatalf("mismatched run: %+v", r)
 	}
 }

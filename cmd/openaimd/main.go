@@ -44,9 +44,19 @@ Usage:
 Common flags:
   --data-dir DIR          data directory (default: $OPENAIM_DATA_DIR, else per-OS)
   --passphrase-file FILE  read the keystore passphrase from FILE
+  --keystore MODE         where the identity seed lives: file, keychain or auto
 
-The passphrase comes from --passphrase-file, else $OPENAIM_PASSPHRASE, else a
-terminal prompt. It is never taken as a command-line argument.
+The seed is kept in a passphrase-encrypted file in the data directory by
+default. --keystore=keychain keeps it in the OS keychain instead (macOS
+Keychain, Secret Service, Windows Credential Manager): no passphrase to type,
+but any program running as you in an unlocked session can read it, so it
+protects the seed less than the file does. --keystore=auto uses the keychain
+when one is available, else the file. init records the choice; run uses it,
+and refuses a --keystore that names a different one.
+
+The passphrase (file keystore only) comes from --passphrase-file, else
+$OPENAIM_PASSPHRASE, else a terminal prompt. It is never taken as a
+command-line argument.
 Run "openaimd <command> -h" for a command's flags.
 `
 
@@ -118,6 +128,21 @@ type common struct {
 	passphraseFile string
 	logLevel       string
 	logJSON        bool
+	keystore       string
+}
+
+// keystoreHelp explains --keystore; see also usage.
+const keystoreHelp = "where the identity seed is kept: file (passphrase-encrypted file in the data dir), " +
+	"keychain (the OS keychain: no passphrase, but any program running as you can read it, so weaker), " +
+	"or auto (the keychain if one is available, else the file)"
+
+// keystoreMode parses --keystore.
+func (c *common) keystoreMode() (daemon.KeystoreMode, error) {
+	m, err := daemon.ParseKeystoreMode(c.keystore)
+	if err != nil {
+		return "", fmt.Errorf("--keystore: %w", err)
+	}
+	return m, nil
 }
 
 func (c *common) register(fs *flag.FlagSet) {
@@ -218,6 +243,8 @@ func runDaemon(ctx context.Context, args []string, e env) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	var c common
 	c.register(fs)
+	fs.StringVar(&c.keystore, "keystore", "", keystoreHelp+
+		"; must match what init chose, and auto accepts it (default: what init chose)")
 	socket := fs.String("socket", "", "API socket path (default: openaimd.sock in the data dir)")
 	registry := fs.String("registry", "", "default handle registry domain: handles one label under it show as just that label (default: none)")
 	var resolvers []string
@@ -237,13 +264,15 @@ func runDaemon(ctx context.Context, args []string, e env) error {
 	if err != nil {
 		return err
 	}
-	pass, err := c.passphrase(e, false)
+	mode, err := c.keystoreMode()
 	if err != nil {
 		return err
 	}
 	err = api.Run(ctx, api.Config{
 		Config: daemon.Config{
-			DataDir: dir, Passphrase: pass, KeystoreParams: keystoreParams, Logger: log,
+			DataDir: dir, Keystore: mode, KeystoreParams: keystoreParams, Logger: log,
+			// Asked only if the identity uses the file keystore.
+			PassphraseFunc: func() ([]byte, error) { return c.passphrase(e, false) },
 			HandleRegistry: *registry, DoHResolvers: resolvers,
 		},
 		SocketPath: *socket,
@@ -258,6 +287,7 @@ func runInit(ctx context.Context, args []string, e env) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	var c common
 	c.register(fs)
+	fs.StringVar(&c.keystore, "keystore", string(daemon.KeystoreModeFile), keystoreHelp)
 	restore := fs.Bool("restore", false, "restore an identity from its 24-word recovery phrase (read from stdin)")
 	if err := parse(fs, args, e); err != nil {
 		return err
@@ -276,20 +306,31 @@ func runInit(ctx context.Context, args []string, e env) error {
 			return err
 		}
 	}
-	pass, err := c.passphrase(e, true)
+	mode, err := c.keystoreMode()
 	if err != nil {
 		return err
 	}
-	id, err := daemon.Init(ctx, daemon.InitConfig{DataDir: dir, Passphrase: pass, Phrase: phrase, KeystoreParams: keystoreParams})
+	if mode, err = daemon.ResolveKeystoreMode(mode); err != nil {
+		return err
+	}
+	cfg := daemon.InitConfig{DataDir: dir, Keystore: mode, Phrase: phrase, KeystoreParams: keystoreParams}
+	where := "OS keychain (no passphrase; readable by programs running as you)"
+	if mode == daemon.KeystoreModeFile {
+		if cfg.Passphrase, err = c.passphrase(e, true); err != nil {
+			return err
+		}
+		where = "passphrase-encrypted file " + daemon.PathsFor(dir).Keystore
+	}
+	id, err := daemon.Init(ctx, cfg)
 	if err != nil {
 		return err
 	}
 	pub := id.Public()
 	if *restore {
-		fmt.Fprintf(e.stdout, "Restored identity %s\n  key: %s\n  data dir: %s\n", pub.KeyID(), pub, dir)
+		fmt.Fprintf(e.stdout, "Restored identity %s\n  key: %s\n  data dir: %s\n  keystore: %s\n", pub.KeyID(), pub, dir, where)
 		return nil
 	}
-	fmt.Fprintf(e.stdout, "Created identity %s\n  key: %s\n  data dir: %s\n\n", pub.KeyID(), pub, dir)
+	fmt.Fprintf(e.stdout, "Created identity %s\n  key: %s\n  data dir: %s\n  keystore: %s\n\n", pub.KeyID(), pub, dir, where)
 	printPhrase(e.stdout, id.Phrase())
 	return nil
 }
