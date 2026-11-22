@@ -1,0 +1,27 @@
+// The plaintext of a rendezvous record's payload (spec/dht-records.md,
+// "Locator", design §6.1 and §7.1).
+//
+// Rendezvous records live in the private DHT. Their payload is encrypted
+// under the locator key L, which only the buddy pair can derive, so this
+// message is never seen by DHT nodes. It is the IP reachability hint of
+// design §7.1: the publisher's current peer ID and addresses, with the
+// times it was issued and stops being valid.
+//
+// Draft: field numbers may change until the wire freeze at the end of M2.
+
+syntax = "proto3";
+
+package openaim.v1;
+
+import "openaim/v1/bodies.proto";
+
+option go_package = "github.com/aghman/openaim/internal/wirepb;wirepb";
+
+message RendezvousLocator {
+  // The publisher's current libp2p peer ID (1–64 bytes) and binary
+  // multiaddrs (≤ 8, each 1–128 bytes), the same limits as in REACH.
+  IPHint ip = 1;
+  uint32 issued_at = 2;  // seconds since the OpenAIM epoch
+  // Seconds since the OpenAIM epoch; issued_at < expires_at ≤ issued_at + 36 h.
+  uint32 expires_at = 3;
+}

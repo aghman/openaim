@@ -42,7 +42,7 @@ Every derivation and signature has its own label. No two uses share one.
 | `openaim/v1/first-contact/siv` | first contact: synthetic-ID key | §11.2 |
 | `openaim/v1/first-contact/s`, `/payload`, `/tail` | first contact: AEAD keys `K_s`, `K_p`, `K_t` | §11.2 |
 | `openaim/v1/first-contact/dedup` | first contact: receiver-local dedup tag (never sent) | §11.5 |
-| `openaim/v1/rdv`, `loc`, `token` | reserved, specified later | — |
+| `openaim/v1/rdv`, `loc`, `token` | `rdv`, `loc`: rendezvous signing seed and locator key, specified in [spec/dht-records.md](dht-records.md#rendezvous-derivation). `token`: reserved, specified later | dht-records.md |
 
 ## 3. Frames
 
