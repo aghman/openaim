@@ -3,9 +3,11 @@ module github.com/aghman/openaim
 go 1.26.5
 
 require (
+	filippo.io/edwards25519 v1.2.0
 	github.com/libp2p/go-libp2p v0.52.0
 	github.com/multiformats/go-multiaddr v0.16.1
 	go.bug.st/serial v1.8.0
+	golang.org/x/crypto v0.59.0
 	google.golang.org/protobuf v1.36.12
 )
 
@@ -83,7 +85,6 @@ require (
 	go.uber.org/mock v0.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
-	golang.org/x/crypto v0.59.0 // indirect
 	golang.org/x/exp v0.0.0-20261113113407-e3970619a1a4 // indirect
 	golang.org/x/mod v0.43.0 // indirect
 	golang.org/x/net v0.62.0 // indirect

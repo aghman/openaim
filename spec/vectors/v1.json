@@ -1,0 +1,67 @@
+{
+  "comment": "OpenAIM wire draft v1 golden vectors (spec/wire.md). Not frozen: changes until the end of M2.",
+  "alice_seed": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+  "bob_seed": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0",
+  "alice_ed25519": "bc7cbcb5636375fa1d82434d466724d92377f53b980695dd49d26d0ce12205a5",
+  "bob_ed25519": "705fbac01f5519899f437bc42e40255ae9ab54bff00de3433af7d687d9e71ad5",
+  "alice_x25519": "c758cc62fd0bf6361a1ed43a9b684e289f60cea7891a986e006acc668ee34561",
+  "bob_x25519": "e76c9deb04699062f797dba170461f423ab308ba33dafcb6bec1e3a6bc7b720b",
+  "alice_key_b32": "xr6lznldmn27uhmcingumzze3erxp5j3tadjlxkj2jwqzyjcawsq",
+  "alice_key_id": "~omff",
+  "safety_number": "08133 01099 75810 99910 33920 78593 47233 52249",
+  "alice_sig_handle_claim": "281f68b0136c88effc6a1faa26012240456546619970ba8a1fa08161b114ba2f0396718d4502e13a9d206e0aa20386e18a4601e5b00b9d0a3d7351e858392801",
+  "k_dir_alice_to_bob": "b5ad087987fe518899770cd2d33ca9269fc1b4eaa135b56024494daf76885b68",
+  "k_dir_bob_to_alice": "047c1b7c7d136ae0d18b8c02a9a5045e78f6616034b85754669e792e13bc9de4",
+  "k_siv_alice_to_bob": "2ce46fac53f547c603d919fd20a9dec46e448868e4e8b9335fef3618a6432be9",
+  "day": 689,
+  "conv_tag_alice_to_bob": "cdb89da04b98780d",
+  "messages": [
+    {
+      "name": "single-fragment IM",
+      "layout": "mesh",
+      "content_type": 1,
+      "flags": 0,
+      "timestamp": 59572800,
+      "seq": 1,
+      "body_utf8": "hey, you there?",
+      "inner": "0100038d0240016865792c20796f752074686572653f",
+      "msg_id": "b1687c9a267f9b2e",
+      "k_msg": "59fde9150ce22c4f32e9be0b46111aa06cd9d9e2813c7b003576f4d63bfeaffd",
+      "frames": [
+        "21cdb89da04b98780db1687c9a267f9b2e000d48df7da45cf56479104e522ae32cbd9e6765a3cefd40c34f82279edf93c40825f3ec3b1392"
+      ]
+    },
+    {
+      "name": "three-fragment IM",
+      "layout": "mesh",
+      "content_type": 1,
+      "flags": 2,
+      "timestamp": 59572805,
+      "seq": 2,
+      "body_utf8": "all work and no play makes jack a dull boy. all work and no play makes jack a dull boy. all work and no play makes jack a dull boy. all work and no play makes jack a dull boy. all work and no play makes jack a dull boy. all work and no play makes jack a dull boy. all work and no play makes jack a dull boy. all work and no play makes jack a dull boy. ",
+      "inner": "0102038d024502616c6c20776f726b20616e64206e6f20706c6179206d616b6573206a61636b20612064756c6c20626f792e20616c6c20776f726b20616e64206e6f20706c6179206d616b6573206a61636b20612064756c6c20626f792e20616c6c20776f726b20616e64206e6f20706c6179206d616b6573206a61636b20612064756c6c20626f792e20616c6c20776f726b20616e64206e6f20706c6179206d616b6573206a61636b20612064756c6c20626f792e20616c6c20776f726b20616e64206e6f20706c6179206d616b6573206a61636b20612064756c6c20626f792e20616c6c20776f726b20616e64206e6f20706c6179206d616b6573206a61636b20612064756c6c20626f792e20616c6c20776f726b20616e64206e6f20706c6179206d616b6573206a61636b20612064756c6c20626f792e20616c6c20776f726b20616e64206e6f20706c6179206d616b6573206a61636b20612064756c6c20626f792e20",
+      "msg_id": "862e4f43d4253796",
+      "k_msg": "f2484e6fd6c084b1f1abc6b5084d5cb7e156cec3b418dad474d781d7e68d875b",
+      "frames": [
+        "21cdb89da04b98780d862e4f43d425379602c0152c6e15e6f47be8cdd0d84cce0c0161af151d6113c8d68f8df875e6031d02d4286de67322b3d6562b60057f52c2e74e70b8376db1ff5477d0f0607bbee33f58b6b7d1a8ea9cd3f1697cc81addd62eabec192e6eafec973e56f0e41066da66df046e9331494464296d046bb1d0f5fb9b8078f740e30a91a6a728cb35e60f3a1662b2b5aa41bf31de5b7ba2f66f7f8f5595e186a716a6fd230965d61a181610a877f7fcebb60057f2e1fc22740bb4dab1dabf963866",
+        "21cdb89da04b98780d862e4f43d42537961283285c1b9f2b7986900231bc3c2254a0881f8d3ec749c25b7626e86421f1d3daf3c461b9c85159a6924ad6b56fad12b5f4c869220e3e581cf1e632aad70a0f6dd2d95ed36fad8d707812358ce1c994310b1198798d6075449203d3a5be025abb0dbae03010f663abc3fc6e067793e443cdc838e576aa6f48d61d2f33ac238116d66a386e46f21c393f26d0420655af8fb3a30fbd9665350f704cf1307d46d9031ab26b84eb55d072abc014c53c788273b8e13e89e70c",
+        "21cdb89da04b98780d862e4f43d4253796226909d3c6be2da7b4ba44b92938671f3f67d34709e045a725068b654a406c0dda2291e449722ef9e6d74ffe"
+      ]
+    },
+    {
+      "name": "IP-layout IM",
+      "layout": "ip",
+      "content_type": 1,
+      "flags": 0,
+      "timestamp": 59572809,
+      "seq": 300,
+      "body_utf8": "long messages use the IP layout",
+      "inner": "0100038d0249ac026c6f6e67206d657373616765732075736520746865204950206c61796f7574",
+      "msg_id": "03d87aab23b82afb",
+      "k_msg": "98674a4c88f257975ccec13c6f4df1becf6e96da1056d36d0b5e1b62306ff752",
+      "frames": [
+        "22cdb89da04b98780d03d87aab23b82afb00e4c75fad6c160f9d17802c4c4033f06f2bc3306f60f45cd13cc0279b16477e96565c647ee449851f8e48cd6460998cc3060478111c712a"
+      ]
+    }
+  ]
+}

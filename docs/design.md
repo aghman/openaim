@@ -293,7 +293,7 @@ Reachability is **not** derived from transport metadata. It's only updated from 
 **Mesh-specific behavior:**
 
 - **Presence beacons:** **one** encrypted frame per beacon, readable by all buddies through the presence key (§8.6). Sent on startup, on state change and every ~30 minutes with jitter, within the airtime budget. Away messages and profiles are **fetched on demand**, never broadcast.
-- **Fragmentation:** messages split into canonical fragments, up to 4 (~655 bytes, §8.3). Longer messages are IP-only, and on a mesh-only route the UI says so before sending.
+- **Fragmentation:** messages split into canonical fragments, up to 4 (657 bytes of text, §8.3). Longer messages are IP-only, and on a mesh-only route the UI says so before sending.
 - **Airtime governor:**
   - **Inputs:** the radio's reported `channel_utilization`, `air_util_tx` and `QueueStatus`, plus the local duty-cycle budget.
   - **Priority order:** IM > ack > presence > profile > Nearby. Stale presence is dropped first.
@@ -382,6 +382,8 @@ New keys cost nothing, so per-sender limits alone are useless (Sybil attacks). I
 
 ## 8. Wire protocol
 
+This section explains the design. Exact byte layouts, labels and derivations are in [spec/wire.md](../spec/wire.md), which wins where the two differ.
+
 ### 8.1 Frame kinds and layout
 
 Every frame starts with `ver_kind` (3-bit version, 5-bit frame kind). The content type (IM, ACK, presence…) is **inside**
@@ -411,7 +413,7 @@ Receivers keep a table of their expected `conv_tag`s for every day within the ac
 ChaCha20-Poly1305 must never encrypt two different plaintexts under the same key and nonce. This is guaranteed three ways at once:
 
 1. **Synthetic message IDs:** `msg_id = HMAC(K_siv, inner_plaintext)[:8]`. Different plaintext gives a different `msg_id`, which gives a different message key, except for a 64-bit collision. Identical plaintext gives identical ciphertext, which is harmless.
-2. **Per-message keys bound to the fragment layout:** `K_msg = HKDF(K_dir, "openaim/v1/msg" ‖ msg_id ‖ frag_count ‖ layout_version)`, with nonce = fragment index (12 bytes, big-endian). Re-fragmenting differently can't reuse a key/nonce pair.
+2. **Per-message keys bound to the fragment layout and the conversation tag:** `K_msg = HKDF(K_dir, "openaim/v1/msg" ‖ conv_tag ‖ msg_id ‖ frag_count ‖ layout)`, with nonce = fragment index (12 bytes, big-endian). Re-fragmenting differently can't reuse a key/nonce pair. Binding `conv_tag`, which is in the associated data and rotates daily, means the same plaintext sealed on two days never reuses a key and nonce with different associated data, which would reuse the Poly1305 one-time key ([spec/wire.md §9](../spec/wire.md#9-departures-from-designmd-v03)).
 3. **Seal once:** frames are created **once**, at send time, at the canonical size, and **persisted**. Retries, route fallbacks and restarts all re-send the stored bytes. The router never re-encodes, re-compresses, re-timestamps or re-fragments a sealed message. A message that must change (after key rotation, §5.5) is a *new* message with a new `msg_id`.
 
 Pairwise keys:
@@ -426,8 +428,8 @@ K_siv  = HKDF(K_dir,  "siv")
 
 - Every fragment is authenticated on its own, so a forged or corrupted fragment is detected individually. Acks can then report exactly which fragments arrived (§8.8).
 - The inner header is in fragment 0 only.
-- **Capacity:** fragment 0 holds ~157 B of body, and later fragments 166 B each. With 4 fragments that's ~655 B before compression.
-- **Same frames on IP:** IP sends messages that could go over mesh as the same canonical frames (batched in one stream write). IP-only content (long text, files, buddy icons) uses `layout_version = ip`, with larger fragments, and can never be routed to mesh.
+- **Capacity:** fragment 0 holds 159 B of body (with a 7-byte inner header), and later fragments 166 B each. With 4 fragments that's 657 B before compression.
+- **Same frames on IP:** IP sends messages that could go over mesh as the same canonical frames (batched in one stream write). IP-only content (long text, files, buddy icons) uses the IP layout (frame kind `DATA_IP`, 4096-byte frames), and can never be routed to mesh.
 
 ### 8.4 Inner payload (encrypted)
 
@@ -441,8 +443,8 @@ content_type (1) | flags (1) | timestamp (4) | seq (varint) | body
 - **`body`:** UTF-8 text for IMs (after optional short-text compression), protobuf for everything else.
 - **Content types:** `IM`, `ACK`, `PRESENCE`, `PROFILE_REQ`, `PROFILE`, `AWAY_MSG`, `TYPING` (IP only), `ROOM_MSG`, `ROOM_INVITE`, `ROOM_REKEY`, `BUDDY_ACCEPT`, `REACH`, `CAPS`, `ROTATE`.
 
-A single-frame IM therefore holds about **157 bytes** of text before compression. The UI's character counter uses the
-**route's** capacity: 157/655 bytes for routes that may use mesh, much more for IP-only.
+A single-frame IM therefore holds **159 bytes** of text before compression. The UI's character counter uses the
+**route's** capacity: 159/657 bytes for routes that may use mesh, much more for IP-only.
 
 ### 8.5 First contact (`FIRST_CONTACT` frame): Noise `X`-style, deniable
 
@@ -622,7 +624,7 @@ reports `is_licensed`, the daemon **refuses to transmit** OpenAIM traffic on it 
 │ ▾ Meshtastic (2)      ││                                                             │
 │   🔓 !a1b2 KD-Base    ││                                                             │
 │ ▸ Offline (2)         │├─────────────────────────────────────────────────────────────┤
-│                       ││ > _                                    157 bytes left (1/4) │
+│                       ││ > _                                    159 bytes left (1/4) │
 └───────────────────────┘└─────────────────────────────────────────────────────────────┘
  [Tab] switch  [Ctrl+N] new IM  [Ctrl+A] away  [Ctrl+R] rooms  [?] help
 ```
