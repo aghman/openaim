@@ -9,6 +9,7 @@ require (
 	github.com/zalando/go-keyring v0.2.8
 	go.bug.st/serial v1.8.0
 	golang.org/x/crypto v0.59.0
+	golang.org/x/net v0.62.0
 	golang.org/x/text v0.44.0
 	google.golang.org/protobuf v1.36.12
 	modernc.org/sqlite v1.62.0
@@ -96,7 +97,6 @@ require (
 	go.uber.org/zap v1.28.0 // indirect
 	golang.org/x/exp v0.0.0-20261113113407-e3970619a1a4 // indirect
 	golang.org/x/mod v0.43.0 // indirect
-	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
 	golang.org/x/telemetry v0.0.0-20261111153349-cdaf7e97dd7b // indirect
