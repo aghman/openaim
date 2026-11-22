@@ -6,6 +6,7 @@ require (
 	filippo.io/edwards25519 v1.2.0
 	github.com/libp2p/go-libp2p v0.52.0
 	github.com/multiformats/go-multiaddr v0.16.1
+	github.com/zalando/go-keyring v0.2.8
 	go.bug.st/serial v1.8.0
 	golang.org/x/crypto v0.59.0
 	golang.org/x/text v0.44.0
@@ -19,12 +20,14 @@ require (
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
 	github.com/dunglas/httpsfv v1.1.2 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/filecoin-project/go-clock v0.1.0 // indirect
 	github.com/flynn/noise v1.1.0 // indirect
+	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/huin/goupnp v1.3.1 // indirect

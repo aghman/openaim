@@ -8,7 +8,7 @@ There are two kinds of file:
 | File | Magic | Holds | Where |
 |------|-------|-------|-------|
 | **Backup** | `OAIMBAK1` | identity seed, recovery seed, buddy list with pinned keys | wherever the user saves it (design §5.5) |
-| **Keystore** | `OAIMKEY1` | identity seed only | the daemon's data directory, used when there's no OS keychain |
+| **Keystore** | `OAIMKEY1` | identity seed only | the daemon's data directory, unless the OS keychain is used (§3.1) |
 
 The recovery seed is kept **only** in the backup, never in the keystore, so a stolen device can't sign a key rotation (design §5.5).
 
@@ -55,8 +55,28 @@ Readers reject a backup whose seeds aren't 32 bytes, or whose keys or states are
 The plaintext is the 32-byte identity seed. The file is written atomically: a temporary file in the same directory is
 synced, then renamed over the old one. It's readable only by its owner (mode 0600 on Unix).
 
+### 3.1 OS keychain instead of the file
+
+When an OS keychain answers, the daemon can keep the seed there instead of in the keystore file:
+- macOS: the login Keychain
+- Linux: the Secret Service, provided by GNOME Keyring or KWallet
+- Windows: the Credential Manager
+
+The item is stored as follows:
+
+| | |
+|---|---|
+| Service | `openaim` |
+| Account | `identity:<absolute data directory>`, so separate data directories keep separate identities |
+| Value | `oa1:` followed by base64(seed), 32 bytes once decoded |
+
+**This protects less than the passphrase file.** Any process running as the user in an unlocked session can read the
+item. On macOS that's because the item belongs to `/usr/bin/security`, which the keychain library drives (secrets go to it
+over stdin, never on the command line). It's the same trade-off as an SSH agent. The passphrase file protects the seed
+even from the user's other programs, as long as the passphrase isn't cached. Users choose. If no keychain answers (for
+example, a Linux server with no D-Bus session), the daemon falls back to the file.
+
 ## 4. Open questions
 
-- **OS keychain backend:** openaim-nxb.25.
 - **Passphrase policy:** minimum length or strength checks are the UI's job. The format accepts any non-empty passphrase.
 - **Upgrading the KDF:** when defaults rise, should the daemon re-seal the keystore under new parameters the next time it opens?
