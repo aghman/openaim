@@ -29,7 +29,9 @@ jobs:
       - name: test (race)
         run: go test -race -count=1 ./...
       - name: golden vectors (independent check)
-        run: python3 -I spec/vectors/verify_v1.py spec/vectors/v1.json
+        run: |
+          python3 -I spec/vectors/verify_v1.py spec/vectors/v1.json
+          python3 -I spec/vectors/verify_rendezvous_v1.py spec/vectors/rendezvous_v1.json
 
   fuzz:
     runs-on: ubuntu-latest

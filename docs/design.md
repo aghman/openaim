@@ -578,6 +578,7 @@ Every signature and key derivation uses a unique, versioned label. No two uses s
 | Registry sign-up | Ed25519 sign over a challenge | `openaim/v1/registry-auth` |
 | Pairwise keys | X25519 + HKDF-SHA256 | `openaim/v1` + `pair`/`dir`/`siv`/`msg`/`tag`/`rdv`/`loc`/`token` |
 | First contact | Noise `X`-style, X25519 + HKDF + ChaCha20-Poly1305 | `openaim/v1/first-contact` |
+| Rendezvous records | Ed25519 sign (per-buddy, per-day key seeded by `rdv`) + XChaCha20-Poly1305 (key `loc`) | `openaim/v1/rdv`, `openaim/v1/loc`, `openaim/v1/dht-rdv-key` ([spec/dht-records.md](../spec/dht-records.md)) |
 | Safety number | SHA-256 | `openaim/v1/safety-number` |
 
 IM content and buddy requests are **deniable**: they're authenticated with shared keys, not signatures. Only deliberately
