@@ -760,6 +760,11 @@ func (s *netState) publishUpdate(e router.Event) {
 	if err != nil || o.ContentType != frame.IM {
 		return
 	}
+	if e.State == router.Sent && o.State != store.Queued {
+		// The router reports the first send after recording it, and the
+		// ACK can win that race: don't report "sent" after "acked".
+		return
+	}
 	k, err := s.keyOf(ctx, e.BuddyID)
 	if err != nil {
 		return
