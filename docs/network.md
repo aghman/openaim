@@ -18,7 +18,8 @@ openaim status --verbose       # peer ID, relay reservations, DHT, sessions, con
   the built-in lists, which are **empty: no community nodes are operated yet**. Two daemons can only find each other
   once both list at least one common bootstrap node and, behind NAT, a relay. A broken file stops `run` with an error.
 - **`--public`** gives the node a fixed peer ID (`network.key` in the data dir, created on first use), runs the DHT in
-  server mode and a circuit relay service (`ip.OpenAIMLimit`: 1 h or 16 MiB per circuit), and takes no reservations
+  server mode and a circuit relay service (`ip.OpenAIMLimit`: 1 h or 16 MiB per circuit) on TCP and QUIC port 4001
+  unless `--listen` says otherwise, and takes no reservations
   itself. Its address, `/ip4/<public IP>/tcp/<port>/p2p/<peer ID>` (or `/dns4/<name>/…`), goes into everyone's
   `network.json`. Invite links refuse relays on private IP addresses, so a relay needs a public IP or a DNS name.
 - **`--offline`** is the old queue-only daemon: no transports, messages stay queued.

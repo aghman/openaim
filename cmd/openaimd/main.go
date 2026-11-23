@@ -280,7 +280,8 @@ func runDaemon(ctx context.Context, args []string, e env) error {
 	contactHint := fs.String("contact-hint", "", "contact hint for invite links: a relay-circuit or mailbox multiaddr, never your own IP address")
 	offline := fs.Bool("offline", false, "don't join the network: messages stay queued (for maintenance)")
 	public := fs.Bool("public", false, "run a public relay and DHT bootstrap node: a fixed peer ID (network.key in the data dir), "+
-		"DHT server mode and a circuit relay service; for operators of publicly reachable machines")
+		"DHT server mode and a circuit relay service, listening on port 4001 unless --listen says otherwise; "+
+		"for operators of publicly reachable machines")
 	natPortMap := fs.Bool("upnp", false, "try to open a port on the home router with UPnP / NAT-PMP")
 	var listen []string
 	fs.Func("listen", "multiaddr to listen on; repeat for each (default: TCP and QUIC on random ports, all interfaces)", func(s string) error {
@@ -336,6 +337,10 @@ func runDaemon(ctx context.Context, args []string, e env) error {
 		// Read network.json now, so a broken file is a clear error.
 		if _, err := ip.LoadNetworkConfig(daemon.PathsFor(dir).Network); err != nil {
 			return fmt.Errorf("network config: %w (fix it, or rewrite it with openaimd network init --force)", err)
+		}
+		if *public && len(listen) == 0 {
+			// Others list a relay by its address: keep the port stable.
+			listen = ip.DefaultListen(4001)
 		}
 		network = &daemon.NetworkOptions{Listen: listen, Public: *public, NATPortMap: *natPortMap}
 	}
