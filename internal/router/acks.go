@@ -198,6 +198,7 @@ func (r *Router) TakeAcks(buddyID int64, max int) []*pb.AckEntry {
 func (r *Router) sendAcks(buddyID int64) {
 	r.mu.Lock()
 	st := r.state(buddyID)
+	st.ackQueued = false
 	entries := r.takeAcksLocked(st, body.MaxAckEntries)
 	if st.ackTimer != nil { // the entries it was for are going now
 		st.ackTimer.Stop()

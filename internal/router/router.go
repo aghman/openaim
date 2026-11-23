@@ -384,7 +384,9 @@ func (r *Router) worker() {
 		r.queue = r.queue[1:]
 		st := r.buddies[j.buddy]
 		if j.acks {
-			st.ackQueued = false
+			// sendAcks clears ackQueued under the same lock that takes the
+			// entries, so entries arriving in between don't queue a second
+			// ACK job.
 			r.mu.Unlock()
 			r.sendAcks(j.buddy)
 			r.cfg.jobs.Add(-1)
