@@ -8,6 +8,7 @@ import (
 
 	pb "github.com/aghman/openaim/internal/apipb"
 	"github.com/aghman/openaim/internal/daemon"
+	"github.com/aghman/openaim/internal/frame"
 	"github.com/aghman/openaim/internal/store"
 )
 
@@ -32,8 +33,16 @@ var handleStatuses = map[store.HandleStatus]pb.HandleStatus{
 	store.HandleUnreachable: pb.HandleStatus_HANDLE_STATUS_UNREACHABLE,
 }
 
-// buddyPB converts a buddy with its handle check state (nil if none).
-func (s *server) buddyPB(b store.Buddy, hc *store.HandleCheck) *pb.Buddy {
+var requestStates = map[store.RequestState]pb.RequestState{
+	store.RequestQueued:   pb.RequestState_REQUEST_STATE_QUEUED,
+	store.RequestSent:     pb.RequestState_REQUEST_STATE_SENT,
+	store.RequestAnswered: pb.RequestState_REQUEST_STATE_ANSWERED,
+	store.RequestFailed:   pb.RequestState_REQUEST_STATE_FAILED,
+}
+
+// buddyPB converts a buddy with its handle check state and details (either
+// nil if none).
+func (s *server) buddyPB(b store.Buddy, hc *store.HandleCheck, det *daemon.BuddyDetails) *pb.Buddy {
 	out := &pb.Buddy{
 		IdentityKey: b.Key.String(),
 		KeyId:       b.Key.KeyID(),
@@ -48,6 +57,24 @@ func (s *server) buddyPB(b store.Buddy, hc *store.HandleCheck) *pb.Buddy {
 		DisplayName: s.n.DisplayName(b),
 		ShortHandle: s.n.ShortHandle(b.Handle),
 	}
+	if b.RecoveryKey != nil {
+		out.RecoveryKey = b.RecoveryKey.String()
+	}
+	if det != nil {
+		out.OfferedName = det.OfferedName
+		if r := det.Request; r != nil {
+			out.Request = &pb.BuddyRequestInfo{
+				DisplayName: r.DisplayName, Greeting: r.Greeting, FirstReceivedAt: ts(r.FirstAt), LastReceivedAt: ts(r.LastAt),
+				Count: uint32(r.Count), SentAt: ts(frame.TimeOf(r.SentTS)),
+			}
+		}
+		if r := det.OutRequest; r != nil {
+			out.OutgoingRequest = &pb.OutgoingRequest{
+				State: requestStates[r.State], Attempts: uint32(r.Attempts), ContactHint: r.ContactHint,
+				LastError: r.LastError, CreatedAt: ts(r.CreatedAt), LastAttemptAt: ts(r.LastAttempt),
+			}
+		}
+	}
 	if hc != nil && b.Handle != "" {
 		out.HandleStatus = handleStatuses[hc.Status]
 		out.HandleLastResult = handleStatuses[hc.LastResult]
@@ -61,13 +88,18 @@ func (s *server) buddyPB(b store.Buddy, hc *store.HandleCheck) *pb.Buddy {
 	return out
 }
 
-// buddyWithCheck converts a buddy, loading its handle check state.
+// buddyWithCheck converts a buddy, loading its handle check state and
+// details.
 func (s *server) buddyWithCheck(ctx context.Context, b store.Buddy) (*pb.Buddy, error) {
 	hc, err := s.n.HandleCheck(ctx, b)
 	if err != nil {
 		return nil, err
 	}
-	return s.buddyPB(b, hc), nil
+	det, err := s.n.Details(ctx, b)
+	if err != nil {
+		return nil, err
+	}
+	return s.buddyPB(b, hc, det), nil
 }
 
 var deliveryStates = map[store.OutState]pb.DeliveryState{
@@ -115,13 +147,15 @@ func (s *server) eventPB(e daemon.Event) *pb.Event {
 	out := &pb.Event{Seq: e.Seq, Time: ts(e.Time)}
 	switch e.Kind {
 	case daemon.EventBuddyAdded:
-		out.Kind = &pb.Event_BuddyAdded{BuddyAdded: s.buddyPB(*e.Buddy, e.HandleCheck)}
+		out.Kind = &pb.Event_BuddyAdded{BuddyAdded: s.buddyPB(*e.Buddy, e.HandleCheck, e.Details)}
 	case daemon.EventBuddyChanged:
-		out.Kind = &pb.Event_BuddyChanged{BuddyChanged: s.buddyPB(*e.Buddy, e.HandleCheck)}
+		out.Kind = &pb.Event_BuddyChanged{BuddyChanged: s.buddyPB(*e.Buddy, e.HandleCheck, e.Details)}
 	case daemon.EventBuddyRemoved:
-		out.Kind = &pb.Event_BuddyRemoved{BuddyRemoved: s.buddyPB(*e.Buddy, e.HandleCheck)}
+		out.Kind = &pb.Event_BuddyRemoved{BuddyRemoved: s.buddyPB(*e.Buddy, e.HandleCheck, e.Details)}
 	case daemon.EventBuddyHandleWarning:
-		out.Kind = &pb.Event_BuddyHandleWarning{BuddyHandleWarning: s.buddyPB(*e.Buddy, e.HandleCheck)}
+		out.Kind = &pb.Event_BuddyHandleWarning{BuddyHandleWarning: s.buddyPB(*e.Buddy, e.HandleCheck, e.Details)}
+	case daemon.EventBuddyRequest:
+		out.Kind = &pb.Event_BuddyRequest{BuddyRequest: s.buddyPB(*e.Buddy, e.HandleCheck, e.Details)}
 	case daemon.EventMessageQueued:
 		out.Kind = &pb.Event_MessageQueued{MessageQueued: messagePB(*e.Message)}
 	case daemon.EventMessageReceived:

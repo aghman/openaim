@@ -23,6 +23,7 @@ import (
 	"github.com/aghman/openaim/internal/keystore"
 	"github.com/aghman/openaim/internal/router"
 	"github.com/aghman/openaim/internal/store"
+	pb "github.com/aghman/openaim/internal/wirepb"
 )
 
 // Config says how to open a node.
@@ -60,6 +61,32 @@ type Config struct {
 	// DisableHandleLoop turns off the background re-check loop, for
 	// callers (tests) that call RecheckDueHandles themselves.
 	DisableHandleLoop bool
+
+	// DisplayName is the name our buddy requests and accepts offer
+	// (at most 64 bytes, no control characters). Buddies see it as our
+	// unverified claim.
+	DisplayName string
+	// FrameSink is where outbound frames go: the transports. nil keeps
+	// them queued until SetFrameSink attaches one.
+	FrameSink FrameSink
+	// Reach, if set, gives our current reachability (REACH) for requests
+	// and accepts. The transports provide it; nil falls back to a REACH
+	// built from ContactHint.
+	Reach func() *pb.Reach
+	// ContactHint, if set, gives the contact hint for our invite links: a
+	// relay-circuit or mailbox address (internal/invite), never our own IP
+	// address. Typically the current relay reservation.
+	ContactHint func() string
+	// FirstContactRate and FirstContactBurst set the per-transport token
+	// bucket for incoming first-contact frames (frames per second, and the
+	// burst); zero means DefaultFirstContactRate and
+	// DefaultFirstContactBurst.
+	FirstContactRate  float64
+	FirstContactBurst int
+	// MaxPendingRequests bounds how many requests (pending_in buddies) may
+	// wait for an answer; requests from further new keys are dropped. Zero
+	// means DefaultMaxPendingRequests.
+	MaxPendingRequests int
 }
 
 // Node is a running daemon's state. Its methods are safe for concurrent use.
@@ -75,6 +102,12 @@ type Node struct {
 	events  *bus
 	keyring *router.Keyring
 	recv    *frame.Receiver
+	fcRecv  *frame.FirstContactReceiver
+	limiter *tokenBuckets
+	fcStats fcCounters
+
+	sinkMu sync.Mutex
+	sinkV  FrameSink
 
 	mu          sync.Mutex // guards pairs, presence and recoveryKey
 	pairs       map[identity.PublicKey]*identity.Pair
@@ -113,6 +146,11 @@ func Open(ctx context.Context, cfg Config) (_ *Node, err error) {
 	if n.now == nil {
 		n.now = time.Now
 	}
+	if err := checkLabel("display name", cfg.DisplayName); err != nil {
+		return nil, err
+	}
+	n.sinkV = cfg.FrameSink
+	n.limiter = newTokenBuckets(cfg.FirstContactRate, cfg.FirstContactBurst)
 	if err := n.setupHandles(cfg); err != nil {
 		return nil, err
 	}
@@ -168,6 +206,9 @@ func Open(ctx context.Context, cfg Config) (_ *Node, err error) {
 	dedup := n.store.Dedup()
 	dedup.OnError = func(err error) { n.log.Error("dedup store failed; dropping fragment", "err", err) }
 	n.recv = &frame.Receiver{Keys: n.keyring, Dedup: dedup, Now: n.now}
+	// First contacts share the dedup table; their entries are keyed by a
+	// separately labelled tag (spec/wire.md §11.5).
+	n.fcRecv = &frame.FirstContactReceiver{Me: n.id, Dedup: dedup, Now: n.now}
 	if err := n.loadPresence(ctx); err != nil {
 		return nil, err
 	}
@@ -238,10 +279,12 @@ func (n *Node) pair(k identity.PublicKey) (*identity.Pair, error) {
 }
 
 // trackBuddy puts a buddy's inbound key in the keyring, so its frames are
-// recognized. Blocked buddies are left out: their frames are dropped as
-// unknown.
+// recognized: buddies we asked (pending_out, for their BUDDY_ACCEPT) and
+// accepted ones. Blocked buddies are left out, so their frames are dropped
+// as unknown before any processing (design §7.5), and so are pending_in
+// ones: nothing of theirs is processed until we accept.
 func (n *Node) trackBuddy(b store.Buddy) error {
-	if b.State == store.Blocked {
+	if b.State == store.Blocked || b.State == store.PendingIn {
 		n.keyring.Remove(b.Key)
 		return nil
 	}

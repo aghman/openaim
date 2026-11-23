@@ -184,6 +184,18 @@ presence. Unverified buddies are marked; compare with "openaim verify".
 				t.row(row...)
 			}
 			t.write(cl.e.stdout, cl.style())
+			var pending []*pb.Buddy
+			for _, b := range bs {
+				if b.GetState() == pb.BuddyState_BUDDY_STATE_PENDING_IN {
+					pending = append(pending, b)
+				}
+			}
+			if len(pending) > 0 {
+				fmt.Fprintf(cl.e.stdout, "\n%d buddy request(s) waiting (openaim accept|decline|block <buddy>):\n", len(pending))
+				for _, b := range pending {
+					fmt.Fprintf(cl.e.stdout, "  %s: %s\n", clean(b.GetKeyId()), requestLine(b))
+				}
+			}
 			return nil
 		}
 	},
@@ -199,19 +211,27 @@ func dimIfOffline(p *pb.Presence) string {
 // ---- add
 
 var cmdAdd = &command{
-	name: "add", synopsis: "<identity-key> [--petname NAME] [--group GROUP]", summary: "add a buddy by identity key",
-	help: `The identity key is the base32 key from an invite link. The buddy starts
-as pending-out until they accept. Exits 5 if the buddy is already on the
-list.
+	name: "add", synopsis: "<identity-key | invite-link> [--petname NAME] [--group GROUP] [--greeting TEXT]",
+	summary: "add a buddy by identity key or invite link, and send them a request",
+	help: `Takes the base32 identity key, or a whole invite link
+(openaim:add/<key>?h=...&c=...; quote it in the shell). A buddy request,
+with --greeting if given, goes to them; the buddy is pending-out until they
+accept. Adding someone who already asked you accepts their request. Exits 5
+if the buddy is already on the list.
 `,
 	setup: func(fs *flag.FlagSet) runFunc {
 		petname := fs.String("petname", "", "your local name for the buddy")
 		group := fs.String("group", "", `buddy-list group (default "Buddies")`)
+		greeting := fs.String("greeting", "", "a short note sent with the request")
 		return func(ctx context.Context, cl *cli, args []string) error {
 			if err := nargs(args, 1, 1); err != nil {
 				return err
 			}
-			b, err := unary(ctx, cl, rpcAddBuddy, &pb.AddBuddyRequest{IdentityKey: args[0], Petname: *petname, Group: *group})
+			req := &pb.AddBuddyRequest{IdentityKey: args[0], Petname: *petname, Group: *group, Greeting: *greeting}
+			if isInviteLink(args[0]) {
+				req.IdentityKey, req.InviteLink = "", args[0]
+			}
+			b, err := unary(ctx, cl, rpcAddBuddy, req)
 			if err != nil {
 				return err
 			}

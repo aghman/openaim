@@ -127,6 +127,9 @@ func formatEvent(s style, ev *pb.Event, names map[string]string) string {
 	case *pb.Event_BuddyRemoved:
 		delete(names, k.BuddyRemoved.GetIdentityKey())
 		return at + "buddy removed: " + buddy(k.BuddyRemoved)
+	case *pb.Event_BuddyRequest:
+		names[k.BuddyRequest.GetIdentityKey()] = buddyName(k.BuddyRequest)
+		return at + s.paint(bold, "buddy request") + " from " + buddy(k.BuddyRequest) + ": " + requestLine(k.BuddyRequest)
 	case *pb.Event_MessageQueued:
 		m := k.MessageQueued
 		return at + fmt.Sprintf("IM to %s queued (%s): ", nameFor(names, m.GetBuddyKey()), clean(m.GetMsgId())) +

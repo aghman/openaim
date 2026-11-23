@@ -21,6 +21,9 @@ const (
 	// EventBuddyHandleWarning: a re-check found the buddy's handle moved to
 	// another key or no longer verifying. Buddy and HandleCheck are set.
 	EventBuddyHandleWarning
+	// EventBuddyRequest: a buddy request arrived (new or merged into an
+	// earlier one). Buddy and Details are set; Details.Request has it.
+	EventBuddyRequest
 )
 
 // Event is one change inside the daemon. Exactly one of Buddy, Message and
@@ -35,6 +38,8 @@ type Event struct {
 	Presence *Presence
 
 	HandleCheck *store.HandleCheck
+	// Details is set on buddy events when known.
+	Details *BuddyDetails
 }
 
 // Subscription errors, reported by Subscription.Err once C is closed.

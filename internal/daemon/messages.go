@@ -174,21 +174,50 @@ func openSealed(k frame.ConvKey, frames [][]byte) (frame.Inner, error) {
 	return frame.ParseInner(inner)
 }
 
-// HandleFrame takes one inbound DATA frame from a transport: it
-// authenticates it, drops replays, reassembles, and delivers complete IMs to
-// the history (publishing message_received). Errors mean the frame was
+// HandleFrame is HandleFrameFrom with no transport name: every caller
+// without one shares a first-contact rate limit.
+func (n *Node) HandleFrame(ctx context.Context, b []byte) (frame.Result, error) {
+	return n.HandleFrameFrom(ctx, "", b)
+}
+
+// HandleFrameFrom takes one inbound frame from a transport (named for the
+// per-transport first-contact rate limit). Errors mean the frame was
 // dropped.
 //
-// TODO(router): send ACKs for res.Have, and handle content types other than
-// IM (presence, acks, buddy accept, …).
-func (n *Node) HandleFrame(ctx context.Context, b []byte) (frame.Result, error) {
+//   - DATA frames are authenticated, deduplicated and reassembled. Complete
+//     IMs go to the history (message_received), BUDDY_ACCEPTs complete a
+//     request (requests.go), and BUDDY_REQUESTs are dropped: they are valid
+//     only in first contacts. Frames from blocked and pending_in buddies
+//     aren't recognized at all.
+//   - FIRST_CONTACT frames are rate-limited per transport, then tried,
+//     deduplicated and reassembled; a complete BUDDY_REQUEST is recorded
+//     (requests.go) and never answered automatically. For these, the
+//     Result has Status and Have, and Conv is the sender once delivered.
+//
+// TODO(router): send ACKs for res.Have, and handle the other content types
+// (presence, acks, ...).
+func (n *Node) HandleFrameFrom(ctx context.Context, transport string, b []byte) (frame.Result, error) {
+	if len(b) > 0 && b[0]>>5 == frame.Version {
+		switch frame.Kind(b[0] & 0x1F) {
+		case frame.KindFirstContact, frame.KindFirstContactIP:
+			return n.handleFirstContact(ctx, transport, b)
+		}
+	}
 	res, err := n.recv.Accept(b)
 	if err != nil || res.Status != frame.Delivered {
 		return res, err
 	}
 	m := res.Message
 	k := res.Conv.(identity.PublicKey)
-	if m.Inner.Type != frame.IM {
+	switch m.Inner.Type {
+	case frame.IM:
+	case frame.BuddyAccept:
+		return res, n.receiveAccept(ctx, k, m.Inner)
+	case frame.BuddyRequest:
+		n.fcStats.dataRequests.Add(1)
+		n.log.Warn("dropping BUDDY_REQUEST in a DATA frame", "buddy", k.KeyID())
+		return res, ErrRequestInData
+	default:
 		n.log.Debug("dropping unhandled content type", "buddy", k.KeyID(), "type", m.Inner.Type)
 		return res, nil
 	}

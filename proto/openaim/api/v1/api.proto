@@ -37,10 +37,37 @@ service Daemon {
   // The whole buddy list, by group then name (`openaim buddies`).
   rpc ListBuddies(ListBuddiesRequest) returns (ListBuddiesResponse);
 
-  // Adds a buddy by identity key or by handle (see AddBuddyRequest). The
-  // buddy starts in BUDDY_STATE_PENDING_OUT. M1 skeleton: no first-contact
-  // request is sent yet (design §5.4).
+  // Adds a buddy by identity key, handle or invite link (see
+  // AddBuddyRequest) and asks them to be our buddy (design §5.4): a
+  // BUDDY_REQUEST is sealed once as a first contact, stored, and handed to
+  // the transports (it stays queued while none is attached). The buddy
+  // starts in BUDDY_STATE_PENDING_OUT. Adding a key that already asked us
+  // (PENDING_IN) accepts their request instead.
   rpc AddBuddy(AddBuddyRequest) returns (Buddy);
+
+  // Our invite link, openaim:add/<key>?h=<handle>&c=<contact hint>
+  // (design §5.4), to share or show as a QR code.
+  rpc CreateInvite(CreateInviteRequest) returns (CreateInviteResponse);
+
+  // Accepts a PENDING_IN buddy's request: the buddy becomes ACCEPTED and
+  // gets a BUDDY_ACCEPT with our presence key and reachability. Nothing
+  // about our presence is shared before this. FAILED_PRECONDITION for a
+  // PENDING_OUT (they haven't asked) or BLOCKED buddy. On an ACCEPTED buddy
+  // it sends BUDDY_ACCEPT again.
+  rpc AcceptBuddy(AcceptBuddyRequest) returns (Buddy);
+
+  // Declines a PENDING_IN buddy's request: it is deleted and nothing is
+  // sent. They can ask again; BlockBuddy stops that. FAILED_PRECONDITION if
+  // the buddy isn't PENDING_IN.
+  rpc DeclineBuddy(DeclineBuddyRequest) returns (DeclineBuddyResponse);
+
+  // Blocks a buddy in any state (design §7.5): their frames and requests
+  // are dropped unprocessed and nothing more is sent to them. Remove the
+  // buddy to unblock.
+  rpc BlockBuddy(BlockBuddyRequest) returns (Buddy);
+
+  // Sets a buddy's petname and/or group (local labels).
+  rpc SetBuddyLabels(SetBuddyLabelsRequest) returns (Buddy);
 
   // Removes a buddy with its queued messages and history.
   rpc RemoveBuddy(RemoveBuddyRequest) returns (RemoveBuddyResponse);
@@ -163,6 +190,47 @@ message Buddy {
   // Why the most recent check didn't verify. In AddBuddy's reply, when a
   // claimed handle was dropped, why it was dropped.
   string handle_error = 17;
+
+  // The request they sent us: set while PENDING_IN, and kept afterwards.
+  BuddyRequestInfo request = 18;
+  // What they call themselves, from their latest request or accept. Their
+  // own claim, unverified: never show it as if it were a petname or a
+  // verified handle (design §5.3).
+  string offered_name = 19;
+  // Their recovery public key (base32), pinned from their request or
+  // accept (spec/wire.md §4.6), or empty.
+  string recovery_key = 20;
+  // Our latest request to them, if we sent one.
+  OutgoingRequest outgoing_request = 21;
+}
+
+// A buddy request we received. Repeat requests from the same key are
+// merged into one.
+message BuddyRequestInfo {
+  string display_name = 1; // their claim, unverified
+  string greeting = 2;     // from the latest request
+  google.protobuf.Timestamp first_received_at = 3;
+  google.protobuf.Timestamp last_received_at = 4;
+  uint32 count = 5;                        // requests merged into this one
+  google.protobuf.Timestamp sent_at = 6;   // the latest request's own timestamp
+}
+
+enum RequestState {
+  REQUEST_STATE_UNSPECIFIED = 0;
+  REQUEST_STATE_QUEUED = 1;   // sealed and stored; no transport has taken it yet
+  REQUEST_STATE_SENT = 2;     // a transport took it
+  REQUEST_STATE_ANSWERED = 3; // they accepted
+  REQUEST_STATE_FAILED = 4;   // abandoned (blocked, or too old to be accepted)
+}
+
+// A buddy request we sent (sealed once; retries resend the same frames).
+message OutgoingRequest {
+  RequestState state = 1;
+  uint32 attempts = 2;
+  string contact_hint = 3; // where it is addressed, or empty
+  string last_error = 4;   // why the last attempt failed, or empty
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp last_attempt_at = 6;
 }
 
 enum HandleStatus {
@@ -189,11 +257,61 @@ message ListBuddiesResponse {
 //     points to that key. Otherwise the buddy is added without a handle and
 //     the reply's handle_error says why.
 // A handle that isn't valid syntax is INVALID_ARGUMENT either way.
+//   - invite_link (openaim:add/<key>?h=&c=) adds the key it names, as
+//     identity_key would, with its handle (if any) as the claimed handle and
+//     its contact hint as where to send the request. identity_key and
+//     handle, if also given, must match it. A malformed link (bad key,
+//     punycode handle, a plain IP address as contact hint, ...) is
+//     INVALID_ARGUMENT.
 message AddBuddyRequest {
   string identity_key = 1; // base32, as in an invite link
   string petname = 2;      // optional
   string group = 3;        // optional; defaults to "Buddies"
   string handle = 4;       // optional; see above
+  string invite_link = 5;  // optional; see above
+  // Optional greeting sent with the request: ≤ 256 bytes, no control
+  // characters but newline and tab.
+  string greeting = 6;
+}
+
+message CreateInviteRequest {
+  // Our handle to include, or empty. It's only a claim: whoever adds us
+  // verifies it.
+  string handle = 1;
+  // A contact hint to use instead of the daemon's own (its current relay
+  // reservation): a relay-circuit or mailbox multiaddr. A plain IP address
+  // is INVALID_ARGUMENT, since the link would reveal it.
+  string contact_hint = 2;
+}
+
+message CreateInviteResponse {
+  string link = 1;
+  string identity_key = 2;
+  string handle = 3;
+  string contact_hint = 4; // empty if none is known
+  string note = 5;         // why something is missing, for the user
+}
+
+message AcceptBuddyRequest {
+  string buddy = 1; // BuddySelector
+}
+
+message DeclineBuddyRequest {
+  string buddy = 1; // BuddySelector
+}
+
+message DeclineBuddyResponse {}
+
+message BlockBuddyRequest {
+  string buddy = 1; // BuddySelector
+}
+
+message SetBuddyLabelsRequest {
+  string buddy = 1; // BuddySelector
+  // Absent leaves a label as it is. An empty petname clears it; an empty
+  // group means "Buddies". ≤ 64 bytes, no control characters.
+  optional string petname = 2;
+  optional string group = 3;
 }
 
 message RemoveBuddyRequest {
@@ -311,6 +429,9 @@ message Event {
     // handle moves again), not on every check; buddy_changed follows every
     // check. The pinned key is unchanged.
     Buddy buddy_handle_warning = 17;
+    // A buddy request arrived: a new PENDING_IN buddy (buddy_added comes
+    // first) or a repeat merged into an earlier one. `request` holds it.
+    Buddy buddy_request = 18;
   }
 }
 

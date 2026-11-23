@@ -101,6 +101,61 @@ func (BuddyState) EnumDescriptor() ([]byte, []int) {
 	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{0}
 }
 
+type RequestState int32
+
+const (
+	RequestState_REQUEST_STATE_UNSPECIFIED RequestState = 0
+	RequestState_REQUEST_STATE_QUEUED      RequestState = 1 // sealed and stored; no transport has taken it yet
+	RequestState_REQUEST_STATE_SENT        RequestState = 2 // a transport took it
+	RequestState_REQUEST_STATE_ANSWERED    RequestState = 3 // they accepted
+	RequestState_REQUEST_STATE_FAILED      RequestState = 4 // abandoned (blocked, or too old to be accepted)
+)
+
+// Enum value maps for RequestState.
+var (
+	RequestState_name = map[int32]string{
+		0: "REQUEST_STATE_UNSPECIFIED",
+		1: "REQUEST_STATE_QUEUED",
+		2: "REQUEST_STATE_SENT",
+		3: "REQUEST_STATE_ANSWERED",
+		4: "REQUEST_STATE_FAILED",
+	}
+	RequestState_value = map[string]int32{
+		"REQUEST_STATE_UNSPECIFIED": 0,
+		"REQUEST_STATE_QUEUED":      1,
+		"REQUEST_STATE_SENT":        2,
+		"REQUEST_STATE_ANSWERED":    3,
+		"REQUEST_STATE_FAILED":      4,
+	}
+)
+
+func (x RequestState) Enum() *RequestState {
+	p := new(RequestState)
+	*p = x
+	return p
+}
+
+func (x RequestState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RequestState) Descriptor() protoreflect.EnumDescriptor {
+	return file_openaim_api_v1_api_proto_enumTypes[1].Descriptor()
+}
+
+func (RequestState) Type() protoreflect.EnumType {
+	return &file_openaim_api_v1_api_proto_enumTypes[1]
+}
+
+func (x RequestState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RequestState.Descriptor instead.
+func (RequestState) EnumDescriptor() ([]byte, []int) {
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{1}
+}
+
 type HandleStatus int32
 
 const (
@@ -140,11 +195,11 @@ func (x HandleStatus) String() string {
 }
 
 func (HandleStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_openaim_api_v1_api_proto_enumTypes[1].Descriptor()
+	return file_openaim_api_v1_api_proto_enumTypes[2].Descriptor()
 }
 
 func (HandleStatus) Type() protoreflect.EnumType {
-	return &file_openaim_api_v1_api_proto_enumTypes[1]
+	return &file_openaim_api_v1_api_proto_enumTypes[2]
 }
 
 func (x HandleStatus) Number() protoreflect.EnumNumber {
@@ -153,7 +208,7 @@ func (x HandleStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use HandleStatus.Descriptor instead.
 func (HandleStatus) EnumDescriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{1}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{2}
 }
 
 type Direction int32
@@ -189,11 +244,11 @@ func (x Direction) String() string {
 }
 
 func (Direction) Descriptor() protoreflect.EnumDescriptor {
-	return file_openaim_api_v1_api_proto_enumTypes[2].Descriptor()
+	return file_openaim_api_v1_api_proto_enumTypes[3].Descriptor()
 }
 
 func (Direction) Type() protoreflect.EnumType {
-	return &file_openaim_api_v1_api_proto_enumTypes[2]
+	return &file_openaim_api_v1_api_proto_enumTypes[3]
 }
 
 func (x Direction) Number() protoreflect.EnumNumber {
@@ -202,7 +257,7 @@ func (x Direction) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Direction.Descriptor instead.
 func (Direction) EnumDescriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{2}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{3}
 }
 
 type DeliveryState int32
@@ -241,11 +296,11 @@ func (x DeliveryState) String() string {
 }
 
 func (DeliveryState) Descriptor() protoreflect.EnumDescriptor {
-	return file_openaim_api_v1_api_proto_enumTypes[3].Descriptor()
+	return file_openaim_api_v1_api_proto_enumTypes[4].Descriptor()
 }
 
 func (DeliveryState) Type() protoreflect.EnumType {
-	return &file_openaim_api_v1_api_proto_enumTypes[3]
+	return &file_openaim_api_v1_api_proto_enumTypes[4]
 }
 
 func (x DeliveryState) Number() protoreflect.EnumNumber {
@@ -254,7 +309,7 @@ func (x DeliveryState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DeliveryState.Descriptor instead.
 func (DeliveryState) EnumDescriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{3}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{4}
 }
 
 type PresenceState int32
@@ -293,11 +348,11 @@ func (x PresenceState) String() string {
 }
 
 func (PresenceState) Descriptor() protoreflect.EnumDescriptor {
-	return file_openaim_api_v1_api_proto_enumTypes[4].Descriptor()
+	return file_openaim_api_v1_api_proto_enumTypes[5].Descriptor()
 }
 
 func (PresenceState) Type() protoreflect.EnumType {
-	return &file_openaim_api_v1_api_proto_enumTypes[4]
+	return &file_openaim_api_v1_api_proto_enumTypes[5]
 }
 
 func (x PresenceState) Number() protoreflect.EnumNumber {
@@ -306,7 +361,7 @@ func (x PresenceState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PresenceState.Descriptor instead.
 func (PresenceState) EnumDescriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{4}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{5}
 }
 
 type GetStatusRequest struct {
@@ -575,9 +630,20 @@ type Buddy struct {
 	HandleMovedTo string `protobuf:"bytes,16,opt,name=handle_moved_to,json=handleMovedTo,proto3" json:"handle_moved_to,omitempty"`
 	// Why the most recent check didn't verify. In AddBuddy's reply, when a
 	// claimed handle was dropped, why it was dropped.
-	HandleError   string `protobuf:"bytes,17,opt,name=handle_error,json=handleError,proto3" json:"handle_error,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	HandleError string `protobuf:"bytes,17,opt,name=handle_error,json=handleError,proto3" json:"handle_error,omitempty"`
+	// The request they sent us: set while PENDING_IN, and kept afterwards.
+	Request *BuddyRequestInfo `protobuf:"bytes,18,opt,name=request,proto3" json:"request,omitempty"`
+	// What they call themselves, from their latest request or accept. Their
+	// own claim, unverified: never show it as if it were a petname or a
+	// verified handle (design §5.3).
+	OfferedName string `protobuf:"bytes,19,opt,name=offered_name,json=offeredName,proto3" json:"offered_name,omitempty"`
+	// Their recovery public key (base32), pinned from their request or
+	// accept (spec/wire.md §4.6), or empty.
+	RecoveryKey string `protobuf:"bytes,20,opt,name=recovery_key,json=recoveryKey,proto3" json:"recovery_key,omitempty"`
+	// Our latest request to them, if we sent one.
+	OutgoingRequest *OutgoingRequest `protobuf:"bytes,21,opt,name=outgoing_request,json=outgoingRequest,proto3" json:"outgoing_request,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Buddy) Reset() {
@@ -729,6 +795,205 @@ func (x *Buddy) GetHandleError() string {
 	return ""
 }
 
+func (x *Buddy) GetRequest() *BuddyRequestInfo {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
+func (x *Buddy) GetOfferedName() string {
+	if x != nil {
+		return x.OfferedName
+	}
+	return ""
+}
+
+func (x *Buddy) GetRecoveryKey() string {
+	if x != nil {
+		return x.RecoveryKey
+	}
+	return ""
+}
+
+func (x *Buddy) GetOutgoingRequest() *OutgoingRequest {
+	if x != nil {
+		return x.OutgoingRequest
+	}
+	return nil
+}
+
+// A buddy request we received. Repeat requests from the same key are
+// merged into one.
+type BuddyRequestInfo struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	DisplayName     string                 `protobuf:"bytes,1,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"` // their claim, unverified
+	Greeting        string                 `protobuf:"bytes,2,opt,name=greeting,proto3" json:"greeting,omitempty"`                          // from the latest request
+	FirstReceivedAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=first_received_at,json=firstReceivedAt,proto3" json:"first_received_at,omitempty"`
+	LastReceivedAt  *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_received_at,json=lastReceivedAt,proto3" json:"last_received_at,omitempty"`
+	Count           uint32                 `protobuf:"varint,5,opt,name=count,proto3" json:"count,omitempty"`                // requests merged into this one
+	SentAt          *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=sent_at,json=sentAt,proto3" json:"sent_at,omitempty"` // the latest request's own timestamp
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *BuddyRequestInfo) Reset() {
+	*x = BuddyRequestInfo{}
+	mi := &file_openaim_api_v1_api_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BuddyRequestInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BuddyRequestInfo) ProtoMessage() {}
+
+func (x *BuddyRequestInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_openaim_api_v1_api_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BuddyRequestInfo.ProtoReflect.Descriptor instead.
+func (*BuddyRequestInfo) Descriptor() ([]byte, []int) {
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *BuddyRequestInfo) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *BuddyRequestInfo) GetGreeting() string {
+	if x != nil {
+		return x.Greeting
+	}
+	return ""
+}
+
+func (x *BuddyRequestInfo) GetFirstReceivedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FirstReceivedAt
+	}
+	return nil
+}
+
+func (x *BuddyRequestInfo) GetLastReceivedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastReceivedAt
+	}
+	return nil
+}
+
+func (x *BuddyRequestInfo) GetCount() uint32 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+func (x *BuddyRequestInfo) GetSentAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.SentAt
+	}
+	return nil
+}
+
+// A buddy request we sent (sealed once; retries resend the same frames).
+type OutgoingRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	State         RequestState           `protobuf:"varint,1,opt,name=state,proto3,enum=openaim.api.v1.RequestState" json:"state,omitempty"`
+	Attempts      uint32                 `protobuf:"varint,2,opt,name=attempts,proto3" json:"attempts,omitempty"`
+	ContactHint   string                 `protobuf:"bytes,3,opt,name=contact_hint,json=contactHint,proto3" json:"contact_hint,omitempty"` // where it is addressed, or empty
+	LastError     string                 `protobuf:"bytes,4,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`       // why the last attempt failed, or empty
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	LastAttemptAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_attempt_at,json=lastAttemptAt,proto3" json:"last_attempt_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OutgoingRequest) Reset() {
+	*x = OutgoingRequest{}
+	mi := &file_openaim_api_v1_api_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OutgoingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OutgoingRequest) ProtoMessage() {}
+
+func (x *OutgoingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_openaim_api_v1_api_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OutgoingRequest.ProtoReflect.Descriptor instead.
+func (*OutgoingRequest) Descriptor() ([]byte, []int) {
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *OutgoingRequest) GetState() RequestState {
+	if x != nil {
+		return x.State
+	}
+	return RequestState_REQUEST_STATE_UNSPECIFIED
+}
+
+func (x *OutgoingRequest) GetAttempts() uint32 {
+	if x != nil {
+		return x.Attempts
+	}
+	return 0
+}
+
+func (x *OutgoingRequest) GetContactHint() string {
+	if x != nil {
+		return x.ContactHint
+	}
+	return ""
+}
+
+func (x *OutgoingRequest) GetLastError() string {
+	if x != nil {
+		return x.LastError
+	}
+	return ""
+}
+
+func (x *OutgoingRequest) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *OutgoingRequest) GetLastAttemptAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastAttemptAt
+	}
+	return nil
+}
+
 type ListBuddiesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -737,7 +1002,7 @@ type ListBuddiesRequest struct {
 
 func (x *ListBuddiesRequest) Reset() {
 	*x = ListBuddiesRequest{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[4]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -749,7 +1014,7 @@ func (x *ListBuddiesRequest) String() string {
 func (*ListBuddiesRequest) ProtoMessage() {}
 
 func (x *ListBuddiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[4]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -762,7 +1027,7 @@ func (x *ListBuddiesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBuddiesRequest.ProtoReflect.Descriptor instead.
 func (*ListBuddiesRequest) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{4}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{6}
 }
 
 type ListBuddiesResponse struct {
@@ -774,7 +1039,7 @@ type ListBuddiesResponse struct {
 
 func (x *ListBuddiesResponse) Reset() {
 	*x = ListBuddiesResponse{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[5]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -786,7 +1051,7 @@ func (x *ListBuddiesResponse) String() string {
 func (*ListBuddiesResponse) ProtoMessage() {}
 
 func (x *ListBuddiesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[5]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -799,7 +1064,7 @@ func (x *ListBuddiesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBuddiesResponse.ProtoReflect.Descriptor instead.
 func (*ListBuddiesResponse) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{5}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListBuddiesResponse) GetBuddies() []*Buddy {
@@ -820,19 +1085,29 @@ func (x *ListBuddiesResponse) GetBuddies() []*Buddy {
 //     the reply's handle_error says why.
 //
 // A handle that isn't valid syntax is INVALID_ARGUMENT either way.
+//   - invite_link (openaim:add/<key>?h=&c=) adds the key it names, as
+//     identity_key would, with its handle (if any) as the claimed handle and
+//     its contact hint as where to send the request. identity_key and
+//     handle, if also given, must match it. A malformed link (bad key,
+//     punycode handle, a plain IP address as contact hint, ...) is
+//     INVALID_ARGUMENT.
 type AddBuddyRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	IdentityKey   string                 `protobuf:"bytes,1,opt,name=identity_key,json=identityKey,proto3" json:"identity_key,omitempty"` // base32, as in an invite link
-	Petname       string                 `protobuf:"bytes,2,opt,name=petname,proto3" json:"petname,omitempty"`                            // optional
-	Group         string                 `protobuf:"bytes,3,opt,name=group,proto3" json:"group,omitempty"`                                // optional; defaults to "Buddies"
-	Handle        string                 `protobuf:"bytes,4,opt,name=handle,proto3" json:"handle,omitempty"`                              // optional; see above
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	IdentityKey string                 `protobuf:"bytes,1,opt,name=identity_key,json=identityKey,proto3" json:"identity_key,omitempty"` // base32, as in an invite link
+	Petname     string                 `protobuf:"bytes,2,opt,name=petname,proto3" json:"petname,omitempty"`                            // optional
+	Group       string                 `protobuf:"bytes,3,opt,name=group,proto3" json:"group,omitempty"`                                // optional; defaults to "Buddies"
+	Handle      string                 `protobuf:"bytes,4,opt,name=handle,proto3" json:"handle,omitempty"`                              // optional; see above
+	InviteLink  string                 `protobuf:"bytes,5,opt,name=invite_link,json=inviteLink,proto3" json:"invite_link,omitempty"`    // optional; see above
+	// Optional greeting sent with the request: ≤ 256 bytes, no control
+	// characters but newline and tab.
+	Greeting      string `protobuf:"bytes,6,opt,name=greeting,proto3" json:"greeting,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AddBuddyRequest) Reset() {
 	*x = AddBuddyRequest{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[6]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -844,7 +1119,7 @@ func (x *AddBuddyRequest) String() string {
 func (*AddBuddyRequest) ProtoMessage() {}
 
 func (x *AddBuddyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[6]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -857,7 +1132,7 @@ func (x *AddBuddyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddBuddyRequest.ProtoReflect.Descriptor instead.
 func (*AddBuddyRequest) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{6}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *AddBuddyRequest) GetIdentityKey() string {
@@ -888,6 +1163,383 @@ func (x *AddBuddyRequest) GetHandle() string {
 	return ""
 }
 
+func (x *AddBuddyRequest) GetInviteLink() string {
+	if x != nil {
+		return x.InviteLink
+	}
+	return ""
+}
+
+func (x *AddBuddyRequest) GetGreeting() string {
+	if x != nil {
+		return x.Greeting
+	}
+	return ""
+}
+
+type CreateInviteRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Our handle to include, or empty. It's only a claim: whoever adds us
+	// verifies it.
+	Handle string `protobuf:"bytes,1,opt,name=handle,proto3" json:"handle,omitempty"`
+	// A contact hint to use instead of the daemon's own (its current relay
+	// reservation): a relay-circuit or mailbox multiaddr. A plain IP address
+	// is INVALID_ARGUMENT, since the link would reveal it.
+	ContactHint   string `protobuf:"bytes,2,opt,name=contact_hint,json=contactHint,proto3" json:"contact_hint,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateInviteRequest) Reset() {
+	*x = CreateInviteRequest{}
+	mi := &file_openaim_api_v1_api_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateInviteRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateInviteRequest) ProtoMessage() {}
+
+func (x *CreateInviteRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_openaim_api_v1_api_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateInviteRequest.ProtoReflect.Descriptor instead.
+func (*CreateInviteRequest) Descriptor() ([]byte, []int) {
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *CreateInviteRequest) GetHandle() string {
+	if x != nil {
+		return x.Handle
+	}
+	return ""
+}
+
+func (x *CreateInviteRequest) GetContactHint() string {
+	if x != nil {
+		return x.ContactHint
+	}
+	return ""
+}
+
+type CreateInviteResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Link          string                 `protobuf:"bytes,1,opt,name=link,proto3" json:"link,omitempty"`
+	IdentityKey   string                 `protobuf:"bytes,2,opt,name=identity_key,json=identityKey,proto3" json:"identity_key,omitempty"`
+	Handle        string                 `protobuf:"bytes,3,opt,name=handle,proto3" json:"handle,omitempty"`
+	ContactHint   string                 `protobuf:"bytes,4,opt,name=contact_hint,json=contactHint,proto3" json:"contact_hint,omitempty"` // empty if none is known
+	Note          string                 `protobuf:"bytes,5,opt,name=note,proto3" json:"note,omitempty"`                                  // why something is missing, for the user
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateInviteResponse) Reset() {
+	*x = CreateInviteResponse{}
+	mi := &file_openaim_api_v1_api_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateInviteResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateInviteResponse) ProtoMessage() {}
+
+func (x *CreateInviteResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_openaim_api_v1_api_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateInviteResponse.ProtoReflect.Descriptor instead.
+func (*CreateInviteResponse) Descriptor() ([]byte, []int) {
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *CreateInviteResponse) GetLink() string {
+	if x != nil {
+		return x.Link
+	}
+	return ""
+}
+
+func (x *CreateInviteResponse) GetIdentityKey() string {
+	if x != nil {
+		return x.IdentityKey
+	}
+	return ""
+}
+
+func (x *CreateInviteResponse) GetHandle() string {
+	if x != nil {
+		return x.Handle
+	}
+	return ""
+}
+
+func (x *CreateInviteResponse) GetContactHint() string {
+	if x != nil {
+		return x.ContactHint
+	}
+	return ""
+}
+
+func (x *CreateInviteResponse) GetNote() string {
+	if x != nil {
+		return x.Note
+	}
+	return ""
+}
+
+type AcceptBuddyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Buddy         string                 `protobuf:"bytes,1,opt,name=buddy,proto3" json:"buddy,omitempty"` // BuddySelector
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AcceptBuddyRequest) Reset() {
+	*x = AcceptBuddyRequest{}
+	mi := &file_openaim_api_v1_api_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AcceptBuddyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AcceptBuddyRequest) ProtoMessage() {}
+
+func (x *AcceptBuddyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_openaim_api_v1_api_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AcceptBuddyRequest.ProtoReflect.Descriptor instead.
+func (*AcceptBuddyRequest) Descriptor() ([]byte, []int) {
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *AcceptBuddyRequest) GetBuddy() string {
+	if x != nil {
+		return x.Buddy
+	}
+	return ""
+}
+
+type DeclineBuddyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Buddy         string                 `protobuf:"bytes,1,opt,name=buddy,proto3" json:"buddy,omitempty"` // BuddySelector
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeclineBuddyRequest) Reset() {
+	*x = DeclineBuddyRequest{}
+	mi := &file_openaim_api_v1_api_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeclineBuddyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeclineBuddyRequest) ProtoMessage() {}
+
+func (x *DeclineBuddyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_openaim_api_v1_api_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeclineBuddyRequest.ProtoReflect.Descriptor instead.
+func (*DeclineBuddyRequest) Descriptor() ([]byte, []int) {
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *DeclineBuddyRequest) GetBuddy() string {
+	if x != nil {
+		return x.Buddy
+	}
+	return ""
+}
+
+type DeclineBuddyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeclineBuddyResponse) Reset() {
+	*x = DeclineBuddyResponse{}
+	mi := &file_openaim_api_v1_api_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeclineBuddyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeclineBuddyResponse) ProtoMessage() {}
+
+func (x *DeclineBuddyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_openaim_api_v1_api_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeclineBuddyResponse.ProtoReflect.Descriptor instead.
+func (*DeclineBuddyResponse) Descriptor() ([]byte, []int) {
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{13}
+}
+
+type BlockBuddyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Buddy         string                 `protobuf:"bytes,1,opt,name=buddy,proto3" json:"buddy,omitempty"` // BuddySelector
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BlockBuddyRequest) Reset() {
+	*x = BlockBuddyRequest{}
+	mi := &file_openaim_api_v1_api_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BlockBuddyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BlockBuddyRequest) ProtoMessage() {}
+
+func (x *BlockBuddyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_openaim_api_v1_api_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BlockBuddyRequest.ProtoReflect.Descriptor instead.
+func (*BlockBuddyRequest) Descriptor() ([]byte, []int) {
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *BlockBuddyRequest) GetBuddy() string {
+	if x != nil {
+		return x.Buddy
+	}
+	return ""
+}
+
+type SetBuddyLabelsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Buddy string                 `protobuf:"bytes,1,opt,name=buddy,proto3" json:"buddy,omitempty"` // BuddySelector
+	// Absent leaves a label as it is. An empty petname clears it; an empty
+	// group means "Buddies". ≤ 64 bytes, no control characters.
+	Petname       *string `protobuf:"bytes,2,opt,name=petname,proto3,oneof" json:"petname,omitempty"`
+	Group         *string `protobuf:"bytes,3,opt,name=group,proto3,oneof" json:"group,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetBuddyLabelsRequest) Reset() {
+	*x = SetBuddyLabelsRequest{}
+	mi := &file_openaim_api_v1_api_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetBuddyLabelsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetBuddyLabelsRequest) ProtoMessage() {}
+
+func (x *SetBuddyLabelsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_openaim_api_v1_api_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetBuddyLabelsRequest.ProtoReflect.Descriptor instead.
+func (*SetBuddyLabelsRequest) Descriptor() ([]byte, []int) {
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *SetBuddyLabelsRequest) GetBuddy() string {
+	if x != nil {
+		return x.Buddy
+	}
+	return ""
+}
+
+func (x *SetBuddyLabelsRequest) GetPetname() string {
+	if x != nil && x.Petname != nil {
+		return *x.Petname
+	}
+	return ""
+}
+
+func (x *SetBuddyLabelsRequest) GetGroup() string {
+	if x != nil && x.Group != nil {
+		return *x.Group
+	}
+	return ""
+}
+
 type RemoveBuddyRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Buddy         string                 `protobuf:"bytes,1,opt,name=buddy,proto3" json:"buddy,omitempty"` // BuddySelector
@@ -897,7 +1549,7 @@ type RemoveBuddyRequest struct {
 
 func (x *RemoveBuddyRequest) Reset() {
 	*x = RemoveBuddyRequest{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[7]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -909,7 +1561,7 @@ func (x *RemoveBuddyRequest) String() string {
 func (*RemoveBuddyRequest) ProtoMessage() {}
 
 func (x *RemoveBuddyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[7]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -922,7 +1574,7 @@ func (x *RemoveBuddyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveBuddyRequest.ProtoReflect.Descriptor instead.
 func (*RemoveBuddyRequest) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{7}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *RemoveBuddyRequest) GetBuddy() string {
@@ -940,7 +1592,7 @@ type RemoveBuddyResponse struct {
 
 func (x *RemoveBuddyResponse) Reset() {
 	*x = RemoveBuddyResponse{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[8]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -952,7 +1604,7 @@ func (x *RemoveBuddyResponse) String() string {
 func (*RemoveBuddyResponse) ProtoMessage() {}
 
 func (x *RemoveBuddyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[8]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -965,7 +1617,7 @@ func (x *RemoveBuddyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveBuddyResponse.ProtoReflect.Descriptor instead.
 func (*RemoveBuddyResponse) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{8}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{17}
 }
 
 type SetBuddyVerifiedRequest struct {
@@ -978,7 +1630,7 @@ type SetBuddyVerifiedRequest struct {
 
 func (x *SetBuddyVerifiedRequest) Reset() {
 	*x = SetBuddyVerifiedRequest{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[9]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -990,7 +1642,7 @@ func (x *SetBuddyVerifiedRequest) String() string {
 func (*SetBuddyVerifiedRequest) ProtoMessage() {}
 
 func (x *SetBuddyVerifiedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[9]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1003,7 +1655,7 @@ func (x *SetBuddyVerifiedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetBuddyVerifiedRequest.ProtoReflect.Descriptor instead.
 func (*SetBuddyVerifiedRequest) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{9}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SetBuddyVerifiedRequest) GetBuddy() string {
@@ -1029,7 +1681,7 @@ type GetSafetyNumberRequest struct {
 
 func (x *GetSafetyNumberRequest) Reset() {
 	*x = GetSafetyNumberRequest{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[10]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1041,7 +1693,7 @@ func (x *GetSafetyNumberRequest) String() string {
 func (*GetSafetyNumberRequest) ProtoMessage() {}
 
 func (x *GetSafetyNumberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[10]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1054,7 +1706,7 @@ func (x *GetSafetyNumberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSafetyNumberRequest.ProtoReflect.Descriptor instead.
 func (*GetSafetyNumberRequest) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{10}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GetSafetyNumberRequest) GetBuddy() string {
@@ -1074,7 +1726,7 @@ type SafetyNumber struct {
 
 func (x *SafetyNumber) Reset() {
 	*x = SafetyNumber{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[11]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1086,7 +1738,7 @@ func (x *SafetyNumber) String() string {
 func (*SafetyNumber) ProtoMessage() {}
 
 func (x *SafetyNumber) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[11]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1099,7 +1751,7 @@ func (x *SafetyNumber) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SafetyNumber.ProtoReflect.Descriptor instead.
 func (*SafetyNumber) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{11}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SafetyNumber) GetSafetyNumber() string {
@@ -1125,7 +1777,7 @@ type CheckHandleRequest struct {
 
 func (x *CheckHandleRequest) Reset() {
 	*x = CheckHandleRequest{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[12]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1137,7 +1789,7 @@ func (x *CheckHandleRequest) String() string {
 func (*CheckHandleRequest) ProtoMessage() {}
 
 func (x *CheckHandleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[12]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1150,7 +1802,7 @@ func (x *CheckHandleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckHandleRequest.ProtoReflect.Descriptor instead.
 func (*CheckHandleRequest) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{12}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *CheckHandleRequest) GetBuddy() string {
@@ -1170,7 +1822,7 @@ type CheckHandleResponse struct {
 
 func (x *CheckHandleResponse) Reset() {
 	*x = CheckHandleResponse{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[13]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1182,7 +1834,7 @@ func (x *CheckHandleResponse) String() string {
 func (*CheckHandleResponse) ProtoMessage() {}
 
 func (x *CheckHandleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[13]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1195,7 +1847,7 @@ func (x *CheckHandleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckHandleResponse.ProtoReflect.Descriptor instead.
 func (*CheckHandleResponse) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{13}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *CheckHandleResponse) GetBuddy() *Buddy {
@@ -1224,7 +1876,7 @@ type SendIMRequest struct {
 
 func (x *SendIMRequest) Reset() {
 	*x = SendIMRequest{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[14]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1236,7 +1888,7 @@ func (x *SendIMRequest) String() string {
 func (*SendIMRequest) ProtoMessage() {}
 
 func (x *SendIMRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[14]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1249,7 +1901,7 @@ func (x *SendIMRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendIMRequest.ProtoReflect.Descriptor instead.
 func (*SendIMRequest) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{14}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *SendIMRequest) GetBuddy() string {
@@ -1276,7 +1928,7 @@ type SendIMResponse struct {
 
 func (x *SendIMResponse) Reset() {
 	*x = SendIMResponse{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[15]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1288,7 +1940,7 @@ func (x *SendIMResponse) String() string {
 func (*SendIMResponse) ProtoMessage() {}
 
 func (x *SendIMResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[15]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1301,7 +1953,7 @@ func (x *SendIMResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendIMResponse.ProtoReflect.Descriptor instead.
 func (*SendIMResponse) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{15}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SendIMResponse) GetMsgId() string {
@@ -1337,7 +1989,7 @@ type Message struct {
 
 func (x *Message) Reset() {
 	*x = Message{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[16]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1349,7 +2001,7 @@ func (x *Message) String() string {
 func (*Message) ProtoMessage() {}
 
 func (x *Message) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[16]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1362,7 +2014,7 @@ func (x *Message) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Message.ProtoReflect.Descriptor instead.
 func (*Message) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{16}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *Message) GetMsgId() string {
@@ -1431,7 +2083,7 @@ type HistoryRequest struct {
 
 func (x *HistoryRequest) Reset() {
 	*x = HistoryRequest{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[17]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1443,7 +2095,7 @@ func (x *HistoryRequest) String() string {
 func (*HistoryRequest) ProtoMessage() {}
 
 func (x *HistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[17]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1456,7 +2108,7 @@ func (x *HistoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryRequest.ProtoReflect.Descriptor instead.
 func (*HistoryRequest) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{17}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *HistoryRequest) GetBuddy() string {
@@ -1482,7 +2134,7 @@ type HistoryResponse struct {
 
 func (x *HistoryResponse) Reset() {
 	*x = HistoryResponse{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[18]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1494,7 +2146,7 @@ func (x *HistoryResponse) String() string {
 func (*HistoryResponse) ProtoMessage() {}
 
 func (x *HistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[18]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1507,7 +2159,7 @@ func (x *HistoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HistoryResponse.ProtoReflect.Descriptor instead.
 func (*HistoryResponse) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{18}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *HistoryResponse) GetMessages() []*Message {
@@ -1530,7 +2182,7 @@ type Presence struct {
 
 func (x *Presence) Reset() {
 	*x = Presence{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[19]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1542,7 +2194,7 @@ func (x *Presence) String() string {
 func (*Presence) ProtoMessage() {}
 
 func (x *Presence) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[19]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1555,7 +2207,7 @@ func (x *Presence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Presence.ProtoReflect.Descriptor instead.
 func (*Presence) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{19}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *Presence) GetState() PresenceState {
@@ -1589,7 +2241,7 @@ type SetPresenceRequest struct {
 
 func (x *SetPresenceRequest) Reset() {
 	*x = SetPresenceRequest{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[20]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1601,7 +2253,7 @@ func (x *SetPresenceRequest) String() string {
 func (*SetPresenceRequest) ProtoMessage() {}
 
 func (x *SetPresenceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[20]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1614,7 +2266,7 @@ func (x *SetPresenceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetPresenceRequest.ProtoReflect.Descriptor instead.
 func (*SetPresenceRequest) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{20}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *SetPresenceRequest) GetState() PresenceState {
@@ -1639,7 +2291,7 @@ type SubscribeEventsRequest struct {
 
 func (x *SubscribeEventsRequest) Reset() {
 	*x = SubscribeEventsRequest{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[21]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1651,7 +2303,7 @@ func (x *SubscribeEventsRequest) String() string {
 func (*SubscribeEventsRequest) ProtoMessage() {}
 
 func (x *SubscribeEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[21]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1664,7 +2316,7 @@ func (x *SubscribeEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeEventsRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeEventsRequest) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{21}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{30}
 }
 
 type Event struct {
@@ -1681,6 +2333,7 @@ type Event struct {
 	//	*Event_MessageReceived
 	//	*Event_PresenceChanged
 	//	*Event_BuddyHandleWarning
+	//	*Event_BuddyRequest
 	Kind          isEvent_Kind `protobuf_oneof:"kind"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1688,7 +2341,7 @@ type Event struct {
 
 func (x *Event) Reset() {
 	*x = Event{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[22]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1700,7 +2353,7 @@ func (x *Event) String() string {
 func (*Event) ProtoMessage() {}
 
 func (x *Event) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[22]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1713,7 +2366,7 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Event.ProtoReflect.Descriptor instead.
 func (*Event) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{22}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *Event) GetSeq() uint64 {
@@ -1809,6 +2462,15 @@ func (x *Event) GetBuddyHandleWarning() *Buddy {
 	return nil
 }
 
+func (x *Event) GetBuddyRequest() *Buddy {
+	if x != nil {
+		if x, ok := x.Kind.(*Event_BuddyRequest); ok {
+			return x.BuddyRequest
+		}
+	}
+	return nil
+}
+
 type isEvent_Kind interface {
 	isEvent_Kind()
 }
@@ -1849,6 +2511,12 @@ type Event_BuddyHandleWarning struct {
 	BuddyHandleWarning *Buddy `protobuf:"bytes,17,opt,name=buddy_handle_warning,json=buddyHandleWarning,proto3,oneof"`
 }
 
+type Event_BuddyRequest struct {
+	// A buddy request arrived: a new PENDING_IN buddy (buddy_added comes
+	// first) or a repeat merged into an earlier one. `request` holds it.
+	BuddyRequest *Buddy `protobuf:"bytes,18,opt,name=buddy_request,json=buddyRequest,proto3,oneof"`
+}
+
 func (*Event_Ready) isEvent_Kind() {}
 
 func (*Event_BuddyAdded) isEvent_Kind() {}
@@ -1865,6 +2533,8 @@ func (*Event_PresenceChanged) isEvent_Kind() {}
 
 func (*Event_BuddyHandleWarning) isEvent_Kind() {}
 
+func (*Event_BuddyRequest) isEvent_Kind() {}
+
 // Ready is the first event of every subscription.
 type Ready struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1874,7 +2544,7 @@ type Ready struct {
 
 func (x *Ready) Reset() {
 	*x = Ready{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[23]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1886,7 +2556,7 @@ func (x *Ready) String() string {
 func (*Ready) ProtoMessage() {}
 
 func (x *Ready) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[23]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1899,7 +2569,7 @@ func (x *Ready) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Ready.ProtoReflect.Descriptor instead.
 func (*Ready) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{23}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{32}
 }
 
 type ExportBackupRequest struct {
@@ -1922,7 +2592,7 @@ type ExportBackupRequest struct {
 
 func (x *ExportBackupRequest) Reset() {
 	*x = ExportBackupRequest{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[24]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1934,7 +2604,7 @@ func (x *ExportBackupRequest) String() string {
 func (*ExportBackupRequest) ProtoMessage() {}
 
 func (x *ExportBackupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[24]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1947,7 +2617,7 @@ func (x *ExportBackupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportBackupRequest.ProtoReflect.Descriptor instead.
 func (*ExportBackupRequest) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{24}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ExportBackupRequest) GetPassphrase() []byte {
@@ -1993,7 +2663,7 @@ type ExportBackupResponse struct {
 
 func (x *ExportBackupResponse) Reset() {
 	*x = ExportBackupResponse{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[25]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2005,7 +2675,7 @@ func (x *ExportBackupResponse) String() string {
 func (*ExportBackupResponse) ProtoMessage() {}
 
 func (x *ExportBackupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[25]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2018,7 +2688,7 @@ func (x *ExportBackupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportBackupResponse.ProtoReflect.Descriptor instead.
 func (*ExportBackupResponse) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{25}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ExportBackupResponse) GetBackup() []byte {
@@ -2057,7 +2727,7 @@ type ShutdownRequest struct {
 
 func (x *ShutdownRequest) Reset() {
 	*x = ShutdownRequest{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[26]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2069,7 +2739,7 @@ func (x *ShutdownRequest) String() string {
 func (*ShutdownRequest) ProtoMessage() {}
 
 func (x *ShutdownRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[26]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2082,7 +2752,7 @@ func (x *ShutdownRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShutdownRequest.ProtoReflect.Descriptor instead.
 func (*ShutdownRequest) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{26}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{35}
 }
 
 type ShutdownResponse struct {
@@ -2093,7 +2763,7 @@ type ShutdownResponse struct {
 
 func (x *ShutdownResponse) Reset() {
 	*x = ShutdownResponse{}
-	mi := &file_openaim_api_v1_api_proto_msgTypes[27]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2105,7 +2775,7 @@ func (x *ShutdownResponse) String() string {
 func (*ShutdownResponse) ProtoMessage() {}
 
 func (x *ShutdownResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_openaim_api_v1_api_proto_msgTypes[27]
+	mi := &file_openaim_api_v1_api_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2118,7 +2788,7 @@ func (x *ShutdownResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShutdownResponse.ProtoReflect.Descriptor instead.
 func (*ShutdownResponse) Descriptor() ([]byte, []int) {
-	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{27}
+	return file_openaim_api_v1_api_proto_rawDescGZIP(), []int{36}
 }
 
 var File_openaim_api_v1_api_proto protoreflect.FileDescriptor
@@ -2147,7 +2817,7 @@ const file_openaim_api_v1_api_proto_rawDesc = "" +
 	"\n" +
 	"pending_in\x18\x03 \x01(\rR\tpendingIn\x12\x1a\n" +
 	"\baccepted\x18\x04 \x01(\rR\baccepted\x12\x18\n" +
-	"\ablocked\x18\x05 \x01(\rR\ablocked\"\xf9\x05\n" +
+	"\ablocked\x18\x05 \x01(\rR\ablocked\"\xc7\a\n" +
 	"\x05Buddy\x12!\n" +
 	"\fidentity_key\x18\x01 \x01(\tR\videntityKey\x12\x15\n" +
 	"\x06key_id\x18\x02 \x01(\tR\x05keyId\x12\x16\n" +
@@ -2166,15 +2836,61 @@ const file_openaim_api_v1_api_proto_rawDesc = "" +
 	"\x11handle_checked_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\x0fhandleCheckedAt\x12K\n" +
 	"\x14handle_next_check_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\x11handleNextCheckAt\x12&\n" +
 	"\x0fhandle_moved_to\x18\x10 \x01(\tR\rhandleMovedTo\x12!\n" +
-	"\fhandle_error\x18\x11 \x01(\tR\vhandleError\"\x14\n" +
+	"\fhandle_error\x18\x11 \x01(\tR\vhandleError\x12:\n" +
+	"\arequest\x18\x12 \x01(\v2 .openaim.api.v1.BuddyRequestInfoR\arequest\x12!\n" +
+	"\foffered_name\x18\x13 \x01(\tR\vofferedName\x12!\n" +
+	"\frecovery_key\x18\x14 \x01(\tR\vrecoveryKey\x12J\n" +
+	"\x10outgoing_request\x18\x15 \x01(\v2\x1f.openaim.api.v1.OutgoingRequestR\x0foutgoingRequest\"\xaa\x02\n" +
+	"\x10BuddyRequestInfo\x12!\n" +
+	"\fdisplay_name\x18\x01 \x01(\tR\vdisplayName\x12\x1a\n" +
+	"\bgreeting\x18\x02 \x01(\tR\bgreeting\x12F\n" +
+	"\x11first_received_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x0ffirstReceivedAt\x12D\n" +
+	"\x10last_received_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x0elastReceivedAt\x12\x14\n" +
+	"\x05count\x18\x05 \x01(\rR\x05count\x123\n" +
+	"\asent_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x06sentAt\"\xa2\x02\n" +
+	"\x0fOutgoingRequest\x122\n" +
+	"\x05state\x18\x01 \x01(\x0e2\x1c.openaim.api.v1.RequestStateR\x05state\x12\x1a\n" +
+	"\battempts\x18\x02 \x01(\rR\battempts\x12!\n" +
+	"\fcontact_hint\x18\x03 \x01(\tR\vcontactHint\x12\x1d\n" +
+	"\n" +
+	"last_error\x18\x04 \x01(\tR\tlastError\x129\n" +
+	"\n" +
+	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12B\n" +
+	"\x0flast_attempt_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\rlastAttemptAt\"\x14\n" +
 	"\x12ListBuddiesRequest\"F\n" +
 	"\x13ListBuddiesResponse\x12/\n" +
-	"\abuddies\x18\x01 \x03(\v2\x15.openaim.api.v1.BuddyR\abuddies\"|\n" +
+	"\abuddies\x18\x01 \x03(\v2\x15.openaim.api.v1.BuddyR\abuddies\"\xb9\x01\n" +
 	"\x0fAddBuddyRequest\x12!\n" +
 	"\fidentity_key\x18\x01 \x01(\tR\videntityKey\x12\x18\n" +
 	"\apetname\x18\x02 \x01(\tR\apetname\x12\x14\n" +
 	"\x05group\x18\x03 \x01(\tR\x05group\x12\x16\n" +
-	"\x06handle\x18\x04 \x01(\tR\x06handle\"*\n" +
+	"\x06handle\x18\x04 \x01(\tR\x06handle\x12\x1f\n" +
+	"\vinvite_link\x18\x05 \x01(\tR\n" +
+	"inviteLink\x12\x1a\n" +
+	"\bgreeting\x18\x06 \x01(\tR\bgreeting\"P\n" +
+	"\x13CreateInviteRequest\x12\x16\n" +
+	"\x06handle\x18\x01 \x01(\tR\x06handle\x12!\n" +
+	"\fcontact_hint\x18\x02 \x01(\tR\vcontactHint\"\x9c\x01\n" +
+	"\x14CreateInviteResponse\x12\x12\n" +
+	"\x04link\x18\x01 \x01(\tR\x04link\x12!\n" +
+	"\fidentity_key\x18\x02 \x01(\tR\videntityKey\x12\x16\n" +
+	"\x06handle\x18\x03 \x01(\tR\x06handle\x12!\n" +
+	"\fcontact_hint\x18\x04 \x01(\tR\vcontactHint\x12\x12\n" +
+	"\x04note\x18\x05 \x01(\tR\x04note\"*\n" +
+	"\x12AcceptBuddyRequest\x12\x14\n" +
+	"\x05buddy\x18\x01 \x01(\tR\x05buddy\"+\n" +
+	"\x13DeclineBuddyRequest\x12\x14\n" +
+	"\x05buddy\x18\x01 \x01(\tR\x05buddy\"\x16\n" +
+	"\x14DeclineBuddyResponse\")\n" +
+	"\x11BlockBuddyRequest\x12\x14\n" +
+	"\x05buddy\x18\x01 \x01(\tR\x05buddy\"}\n" +
+	"\x15SetBuddyLabelsRequest\x12\x14\n" +
+	"\x05buddy\x18\x01 \x01(\tR\x05buddy\x12\x1d\n" +
+	"\apetname\x18\x02 \x01(\tH\x00R\apetname\x88\x01\x01\x12\x19\n" +
+	"\x05group\x18\x03 \x01(\tH\x01R\x05group\x88\x01\x01B\n" +
+	"\n" +
+	"\b_petnameB\b\n" +
+	"\x06_group\"*\n" +
 	"\x12RemoveBuddyRequest\x12\x14\n" +
 	"\x05buddy\x18\x01 \x01(\tR\x05buddy\"\x15\n" +
 	"\x13RemoveBuddyResponse\"K\n" +
@@ -2219,7 +2935,7 @@ const file_openaim_api_v1_api_proto_rawDesc = "" +
 	"\x12SetPresenceRequest\x123\n" +
 	"\x05state\x18\x01 \x01(\x0e2\x1d.openaim.api.v1.PresenceStateR\x05state\x12!\n" +
 	"\faway_message\x18\x02 \x01(\tR\vawayMessage\"\x18\n" +
-	"\x16SubscribeEventsRequest\"\xd0\x04\n" +
+	"\x16SubscribeEventsRequest\"\x8e\x05\n" +
 	"\x05Event\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x04R\x03seq\x12.\n" +
 	"\x04time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12-\n" +
@@ -2232,7 +2948,8 @@ const file_openaim_api_v1_api_proto_rawDesc = "" +
 	"\x0emessage_queued\x18\x0e \x01(\v2\x17.openaim.api.v1.MessageH\x00R\rmessageQueued\x12D\n" +
 	"\x10message_received\x18\x0f \x01(\v2\x17.openaim.api.v1.MessageH\x00R\x0fmessageReceived\x12E\n" +
 	"\x10presence_changed\x18\x10 \x01(\v2\x18.openaim.api.v1.PresenceH\x00R\x0fpresenceChanged\x12I\n" +
-	"\x14buddy_handle_warning\x18\x11 \x01(\v2\x15.openaim.api.v1.BuddyH\x00R\x12buddyHandleWarningB\x06\n" +
+	"\x14buddy_handle_warning\x18\x11 \x01(\v2\x15.openaim.api.v1.BuddyH\x00R\x12buddyHandleWarning\x12<\n" +
+	"\rbuddy_request\x18\x12 \x01(\v2\x15.openaim.api.v1.BuddyH\x00R\fbuddyRequestB\x06\n" +
 	"\x04kind\"\a\n" +
 	"\x05Ready\"\xc7\x01\n" +
 	"\x13ExportBackupRequest\x12\x1e\n" +
@@ -2255,7 +2972,13 @@ const file_openaim_api_v1_api_proto_rawDesc = "" +
 	"\x17BUDDY_STATE_PENDING_OUT\x10\x01\x12\x1a\n" +
 	"\x16BUDDY_STATE_PENDING_IN\x10\x02\x12\x18\n" +
 	"\x14BUDDY_STATE_ACCEPTED\x10\x03\x12\x17\n" +
-	"\x13BUDDY_STATE_BLOCKED\x10\x04*\x9f\x01\n" +
+	"\x13BUDDY_STATE_BLOCKED\x10\x04*\x95\x01\n" +
+	"\fRequestState\x12\x1d\n" +
+	"\x19REQUEST_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14REQUEST_STATE_QUEUED\x10\x01\x12\x16\n" +
+	"\x12REQUEST_STATE_SENT\x10\x02\x12\x1a\n" +
+	"\x16REQUEST_STATE_ANSWERED\x10\x03\x12\x18\n" +
+	"\x14REQUEST_STATE_FAILED\x10\x04*\x9f\x01\n" +
 	"\fHandleStatus\x12\x1d\n" +
 	"\x19HANDLE_STATUS_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16HANDLE_STATUS_VERIFIED\x10\x01\x12\x17\n" +
@@ -2275,11 +2998,17 @@ const file_openaim_api_v1_api_proto_rawDesc = "" +
 	"\x1aPRESENCE_STATE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15PRESENCE_STATE_ONLINE\x10\x01\x12\x17\n" +
 	"\x13PRESENCE_STATE_AWAY\x10\x02\x12\x1a\n" +
-	"\x16PRESENCE_STATE_OFFLINE\x10\x032\xa8\b\n" +
+	"\x16PRESENCE_STATE_OFFLINE\x10\x032\xc0\v\n" +
 	"\x06Daemon\x12E\n" +
 	"\tGetStatus\x12 .openaim.api.v1.GetStatusRequest\x1a\x16.openaim.api.v1.Status\x12V\n" +
 	"\vListBuddies\x12\".openaim.api.v1.ListBuddiesRequest\x1a#.openaim.api.v1.ListBuddiesResponse\x12B\n" +
-	"\bAddBuddy\x12\x1f.openaim.api.v1.AddBuddyRequest\x1a\x15.openaim.api.v1.Buddy\x12V\n" +
+	"\bAddBuddy\x12\x1f.openaim.api.v1.AddBuddyRequest\x1a\x15.openaim.api.v1.Buddy\x12Y\n" +
+	"\fCreateInvite\x12#.openaim.api.v1.CreateInviteRequest\x1a$.openaim.api.v1.CreateInviteResponse\x12H\n" +
+	"\vAcceptBuddy\x12\".openaim.api.v1.AcceptBuddyRequest\x1a\x15.openaim.api.v1.Buddy\x12Y\n" +
+	"\fDeclineBuddy\x12#.openaim.api.v1.DeclineBuddyRequest\x1a$.openaim.api.v1.DeclineBuddyResponse\x12F\n" +
+	"\n" +
+	"BlockBuddy\x12!.openaim.api.v1.BlockBuddyRequest\x1a\x15.openaim.api.v1.Buddy\x12N\n" +
+	"\x0eSetBuddyLabels\x12%.openaim.api.v1.SetBuddyLabelsRequest\x1a\x15.openaim.api.v1.Buddy\x12V\n" +
 	"\vRemoveBuddy\x12\".openaim.api.v1.RemoveBuddyRequest\x1a#.openaim.api.v1.RemoveBuddyResponse\x12R\n" +
 	"\x10SetBuddyVerified\x12'.openaim.api.v1.SetBuddyVerifiedRequest\x1a\x15.openaim.api.v1.Buddy\x12W\n" +
 	"\x0fGetSafetyNumber\x12&.openaim.api.v1.GetSafetyNumberRequest\x1a\x1c.openaim.api.v1.SafetyNumber\x12V\n" +
@@ -2303,110 +3032,139 @@ func file_openaim_api_v1_api_proto_rawDescGZIP() []byte {
 	return file_openaim_api_v1_api_proto_rawDescData
 }
 
-var file_openaim_api_v1_api_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_openaim_api_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_openaim_api_v1_api_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_openaim_api_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
 var file_openaim_api_v1_api_proto_goTypes = []any{
 	(BuddyState)(0),                 // 0: openaim.api.v1.BuddyState
-	(HandleStatus)(0),               // 1: openaim.api.v1.HandleStatus
-	(Direction)(0),                  // 2: openaim.api.v1.Direction
-	(DeliveryState)(0),              // 3: openaim.api.v1.DeliveryState
-	(PresenceState)(0),              // 4: openaim.api.v1.PresenceState
-	(*GetStatusRequest)(nil),        // 5: openaim.api.v1.GetStatusRequest
-	(*Status)(nil),                  // 6: openaim.api.v1.Status
-	(*BuddyCounts)(nil),             // 7: openaim.api.v1.BuddyCounts
-	(*Buddy)(nil),                   // 8: openaim.api.v1.Buddy
-	(*ListBuddiesRequest)(nil),      // 9: openaim.api.v1.ListBuddiesRequest
-	(*ListBuddiesResponse)(nil),     // 10: openaim.api.v1.ListBuddiesResponse
-	(*AddBuddyRequest)(nil),         // 11: openaim.api.v1.AddBuddyRequest
-	(*RemoveBuddyRequest)(nil),      // 12: openaim.api.v1.RemoveBuddyRequest
-	(*RemoveBuddyResponse)(nil),     // 13: openaim.api.v1.RemoveBuddyResponse
-	(*SetBuddyVerifiedRequest)(nil), // 14: openaim.api.v1.SetBuddyVerifiedRequest
-	(*GetSafetyNumberRequest)(nil),  // 15: openaim.api.v1.GetSafetyNumberRequest
-	(*SafetyNumber)(nil),            // 16: openaim.api.v1.SafetyNumber
-	(*CheckHandleRequest)(nil),      // 17: openaim.api.v1.CheckHandleRequest
-	(*CheckHandleResponse)(nil),     // 18: openaim.api.v1.CheckHandleResponse
-	(*SendIMRequest)(nil),           // 19: openaim.api.v1.SendIMRequest
-	(*SendIMResponse)(nil),          // 20: openaim.api.v1.SendIMResponse
-	(*Message)(nil),                 // 21: openaim.api.v1.Message
-	(*HistoryRequest)(nil),          // 22: openaim.api.v1.HistoryRequest
-	(*HistoryResponse)(nil),         // 23: openaim.api.v1.HistoryResponse
-	(*Presence)(nil),                // 24: openaim.api.v1.Presence
-	(*SetPresenceRequest)(nil),      // 25: openaim.api.v1.SetPresenceRequest
-	(*SubscribeEventsRequest)(nil),  // 26: openaim.api.v1.SubscribeEventsRequest
-	(*Event)(nil),                   // 27: openaim.api.v1.Event
-	(*Ready)(nil),                   // 28: openaim.api.v1.Ready
-	(*ExportBackupRequest)(nil),     // 29: openaim.api.v1.ExportBackupRequest
-	(*ExportBackupResponse)(nil),    // 30: openaim.api.v1.ExportBackupResponse
-	(*ShutdownRequest)(nil),         // 31: openaim.api.v1.ShutdownRequest
-	(*ShutdownResponse)(nil),        // 32: openaim.api.v1.ShutdownResponse
-	(*timestamppb.Timestamp)(nil),   // 33: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),     // 34: google.protobuf.Duration
+	(RequestState)(0),               // 1: openaim.api.v1.RequestState
+	(HandleStatus)(0),               // 2: openaim.api.v1.HandleStatus
+	(Direction)(0),                  // 3: openaim.api.v1.Direction
+	(DeliveryState)(0),              // 4: openaim.api.v1.DeliveryState
+	(PresenceState)(0),              // 5: openaim.api.v1.PresenceState
+	(*GetStatusRequest)(nil),        // 6: openaim.api.v1.GetStatusRequest
+	(*Status)(nil),                  // 7: openaim.api.v1.Status
+	(*BuddyCounts)(nil),             // 8: openaim.api.v1.BuddyCounts
+	(*Buddy)(nil),                   // 9: openaim.api.v1.Buddy
+	(*BuddyRequestInfo)(nil),        // 10: openaim.api.v1.BuddyRequestInfo
+	(*OutgoingRequest)(nil),         // 11: openaim.api.v1.OutgoingRequest
+	(*ListBuddiesRequest)(nil),      // 12: openaim.api.v1.ListBuddiesRequest
+	(*ListBuddiesResponse)(nil),     // 13: openaim.api.v1.ListBuddiesResponse
+	(*AddBuddyRequest)(nil),         // 14: openaim.api.v1.AddBuddyRequest
+	(*CreateInviteRequest)(nil),     // 15: openaim.api.v1.CreateInviteRequest
+	(*CreateInviteResponse)(nil),    // 16: openaim.api.v1.CreateInviteResponse
+	(*AcceptBuddyRequest)(nil),      // 17: openaim.api.v1.AcceptBuddyRequest
+	(*DeclineBuddyRequest)(nil),     // 18: openaim.api.v1.DeclineBuddyRequest
+	(*DeclineBuddyResponse)(nil),    // 19: openaim.api.v1.DeclineBuddyResponse
+	(*BlockBuddyRequest)(nil),       // 20: openaim.api.v1.BlockBuddyRequest
+	(*SetBuddyLabelsRequest)(nil),   // 21: openaim.api.v1.SetBuddyLabelsRequest
+	(*RemoveBuddyRequest)(nil),      // 22: openaim.api.v1.RemoveBuddyRequest
+	(*RemoveBuddyResponse)(nil),     // 23: openaim.api.v1.RemoveBuddyResponse
+	(*SetBuddyVerifiedRequest)(nil), // 24: openaim.api.v1.SetBuddyVerifiedRequest
+	(*GetSafetyNumberRequest)(nil),  // 25: openaim.api.v1.GetSafetyNumberRequest
+	(*SafetyNumber)(nil),            // 26: openaim.api.v1.SafetyNumber
+	(*CheckHandleRequest)(nil),      // 27: openaim.api.v1.CheckHandleRequest
+	(*CheckHandleResponse)(nil),     // 28: openaim.api.v1.CheckHandleResponse
+	(*SendIMRequest)(nil),           // 29: openaim.api.v1.SendIMRequest
+	(*SendIMResponse)(nil),          // 30: openaim.api.v1.SendIMResponse
+	(*Message)(nil),                 // 31: openaim.api.v1.Message
+	(*HistoryRequest)(nil),          // 32: openaim.api.v1.HistoryRequest
+	(*HistoryResponse)(nil),         // 33: openaim.api.v1.HistoryResponse
+	(*Presence)(nil),                // 34: openaim.api.v1.Presence
+	(*SetPresenceRequest)(nil),      // 35: openaim.api.v1.SetPresenceRequest
+	(*SubscribeEventsRequest)(nil),  // 36: openaim.api.v1.SubscribeEventsRequest
+	(*Event)(nil),                   // 37: openaim.api.v1.Event
+	(*Ready)(nil),                   // 38: openaim.api.v1.Ready
+	(*ExportBackupRequest)(nil),     // 39: openaim.api.v1.ExportBackupRequest
+	(*ExportBackupResponse)(nil),    // 40: openaim.api.v1.ExportBackupResponse
+	(*ShutdownRequest)(nil),         // 41: openaim.api.v1.ShutdownRequest
+	(*ShutdownResponse)(nil),        // 42: openaim.api.v1.ShutdownResponse
+	(*timestamppb.Timestamp)(nil),   // 43: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),     // 44: google.protobuf.Duration
 }
 var file_openaim_api_v1_api_proto_depIdxs = []int32{
-	33, // 0: openaim.api.v1.Status.started_at:type_name -> google.protobuf.Timestamp
-	34, // 1: openaim.api.v1.Status.uptime:type_name -> google.protobuf.Duration
-	7,  // 2: openaim.api.v1.Status.buddies:type_name -> openaim.api.v1.BuddyCounts
-	24, // 3: openaim.api.v1.Status.presence:type_name -> openaim.api.v1.Presence
+	43, // 0: openaim.api.v1.Status.started_at:type_name -> google.protobuf.Timestamp
+	44, // 1: openaim.api.v1.Status.uptime:type_name -> google.protobuf.Duration
+	8,  // 2: openaim.api.v1.Status.buddies:type_name -> openaim.api.v1.BuddyCounts
+	34, // 3: openaim.api.v1.Status.presence:type_name -> openaim.api.v1.Presence
 	0,  // 4: openaim.api.v1.Buddy.state:type_name -> openaim.api.v1.BuddyState
-	33, // 5: openaim.api.v1.Buddy.added_at:type_name -> google.protobuf.Timestamp
-	24, // 6: openaim.api.v1.Buddy.presence:type_name -> openaim.api.v1.Presence
-	1,  // 7: openaim.api.v1.Buddy.handle_status:type_name -> openaim.api.v1.HandleStatus
-	1,  // 8: openaim.api.v1.Buddy.handle_last_result:type_name -> openaim.api.v1.HandleStatus
-	33, // 9: openaim.api.v1.Buddy.handle_checked_at:type_name -> google.protobuf.Timestamp
-	33, // 10: openaim.api.v1.Buddy.handle_next_check_at:type_name -> google.protobuf.Timestamp
-	8,  // 11: openaim.api.v1.ListBuddiesResponse.buddies:type_name -> openaim.api.v1.Buddy
-	8,  // 12: openaim.api.v1.SafetyNumber.buddy:type_name -> openaim.api.v1.Buddy
-	8,  // 13: openaim.api.v1.CheckHandleResponse.buddy:type_name -> openaim.api.v1.Buddy
-	1,  // 14: openaim.api.v1.CheckHandleResponse.result:type_name -> openaim.api.v1.HandleStatus
-	21, // 15: openaim.api.v1.SendIMResponse.message:type_name -> openaim.api.v1.Message
-	2,  // 16: openaim.api.v1.Message.direction:type_name -> openaim.api.v1.Direction
-	33, // 17: openaim.api.v1.Message.sent_at:type_name -> google.protobuf.Timestamp
-	33, // 18: openaim.api.v1.Message.received_at:type_name -> google.protobuf.Timestamp
-	3,  // 19: openaim.api.v1.Message.delivery:type_name -> openaim.api.v1.DeliveryState
-	21, // 20: openaim.api.v1.HistoryResponse.messages:type_name -> openaim.api.v1.Message
-	4,  // 21: openaim.api.v1.Presence.state:type_name -> openaim.api.v1.PresenceState
-	33, // 22: openaim.api.v1.Presence.since:type_name -> google.protobuf.Timestamp
-	4,  // 23: openaim.api.v1.SetPresenceRequest.state:type_name -> openaim.api.v1.PresenceState
-	33, // 24: openaim.api.v1.Event.time:type_name -> google.protobuf.Timestamp
-	28, // 25: openaim.api.v1.Event.ready:type_name -> openaim.api.v1.Ready
-	8,  // 26: openaim.api.v1.Event.buddy_added:type_name -> openaim.api.v1.Buddy
-	8,  // 27: openaim.api.v1.Event.buddy_changed:type_name -> openaim.api.v1.Buddy
-	8,  // 28: openaim.api.v1.Event.buddy_removed:type_name -> openaim.api.v1.Buddy
-	21, // 29: openaim.api.v1.Event.message_queued:type_name -> openaim.api.v1.Message
-	21, // 30: openaim.api.v1.Event.message_received:type_name -> openaim.api.v1.Message
-	24, // 31: openaim.api.v1.Event.presence_changed:type_name -> openaim.api.v1.Presence
-	8,  // 32: openaim.api.v1.Event.buddy_handle_warning:type_name -> openaim.api.v1.Buddy
-	5,  // 33: openaim.api.v1.Daemon.GetStatus:input_type -> openaim.api.v1.GetStatusRequest
-	9,  // 34: openaim.api.v1.Daemon.ListBuddies:input_type -> openaim.api.v1.ListBuddiesRequest
-	11, // 35: openaim.api.v1.Daemon.AddBuddy:input_type -> openaim.api.v1.AddBuddyRequest
-	12, // 36: openaim.api.v1.Daemon.RemoveBuddy:input_type -> openaim.api.v1.RemoveBuddyRequest
-	14, // 37: openaim.api.v1.Daemon.SetBuddyVerified:input_type -> openaim.api.v1.SetBuddyVerifiedRequest
-	15, // 38: openaim.api.v1.Daemon.GetSafetyNumber:input_type -> openaim.api.v1.GetSafetyNumberRequest
-	17, // 39: openaim.api.v1.Daemon.CheckHandle:input_type -> openaim.api.v1.CheckHandleRequest
-	19, // 40: openaim.api.v1.Daemon.SendIM:input_type -> openaim.api.v1.SendIMRequest
-	22, // 41: openaim.api.v1.Daemon.History:input_type -> openaim.api.v1.HistoryRequest
-	25, // 42: openaim.api.v1.Daemon.SetPresence:input_type -> openaim.api.v1.SetPresenceRequest
-	26, // 43: openaim.api.v1.Daemon.SubscribeEvents:input_type -> openaim.api.v1.SubscribeEventsRequest
-	29, // 44: openaim.api.v1.Daemon.ExportBackup:input_type -> openaim.api.v1.ExportBackupRequest
-	31, // 45: openaim.api.v1.Daemon.Shutdown:input_type -> openaim.api.v1.ShutdownRequest
-	6,  // 46: openaim.api.v1.Daemon.GetStatus:output_type -> openaim.api.v1.Status
-	10, // 47: openaim.api.v1.Daemon.ListBuddies:output_type -> openaim.api.v1.ListBuddiesResponse
-	8,  // 48: openaim.api.v1.Daemon.AddBuddy:output_type -> openaim.api.v1.Buddy
-	13, // 49: openaim.api.v1.Daemon.RemoveBuddy:output_type -> openaim.api.v1.RemoveBuddyResponse
-	8,  // 50: openaim.api.v1.Daemon.SetBuddyVerified:output_type -> openaim.api.v1.Buddy
-	16, // 51: openaim.api.v1.Daemon.GetSafetyNumber:output_type -> openaim.api.v1.SafetyNumber
-	18, // 52: openaim.api.v1.Daemon.CheckHandle:output_type -> openaim.api.v1.CheckHandleResponse
-	20, // 53: openaim.api.v1.Daemon.SendIM:output_type -> openaim.api.v1.SendIMResponse
-	23, // 54: openaim.api.v1.Daemon.History:output_type -> openaim.api.v1.HistoryResponse
-	24, // 55: openaim.api.v1.Daemon.SetPresence:output_type -> openaim.api.v1.Presence
-	27, // 56: openaim.api.v1.Daemon.SubscribeEvents:output_type -> openaim.api.v1.Event
-	30, // 57: openaim.api.v1.Daemon.ExportBackup:output_type -> openaim.api.v1.ExportBackupResponse
-	32, // 58: openaim.api.v1.Daemon.Shutdown:output_type -> openaim.api.v1.ShutdownResponse
-	46, // [46:59] is the sub-list for method output_type
-	33, // [33:46] is the sub-list for method input_type
-	33, // [33:33] is the sub-list for extension type_name
-	33, // [33:33] is the sub-list for extension extendee
-	0,  // [0:33] is the sub-list for field type_name
+	43, // 5: openaim.api.v1.Buddy.added_at:type_name -> google.protobuf.Timestamp
+	34, // 6: openaim.api.v1.Buddy.presence:type_name -> openaim.api.v1.Presence
+	2,  // 7: openaim.api.v1.Buddy.handle_status:type_name -> openaim.api.v1.HandleStatus
+	2,  // 8: openaim.api.v1.Buddy.handle_last_result:type_name -> openaim.api.v1.HandleStatus
+	43, // 9: openaim.api.v1.Buddy.handle_checked_at:type_name -> google.protobuf.Timestamp
+	43, // 10: openaim.api.v1.Buddy.handle_next_check_at:type_name -> google.protobuf.Timestamp
+	10, // 11: openaim.api.v1.Buddy.request:type_name -> openaim.api.v1.BuddyRequestInfo
+	11, // 12: openaim.api.v1.Buddy.outgoing_request:type_name -> openaim.api.v1.OutgoingRequest
+	43, // 13: openaim.api.v1.BuddyRequestInfo.first_received_at:type_name -> google.protobuf.Timestamp
+	43, // 14: openaim.api.v1.BuddyRequestInfo.last_received_at:type_name -> google.protobuf.Timestamp
+	43, // 15: openaim.api.v1.BuddyRequestInfo.sent_at:type_name -> google.protobuf.Timestamp
+	1,  // 16: openaim.api.v1.OutgoingRequest.state:type_name -> openaim.api.v1.RequestState
+	43, // 17: openaim.api.v1.OutgoingRequest.created_at:type_name -> google.protobuf.Timestamp
+	43, // 18: openaim.api.v1.OutgoingRequest.last_attempt_at:type_name -> google.protobuf.Timestamp
+	9,  // 19: openaim.api.v1.ListBuddiesResponse.buddies:type_name -> openaim.api.v1.Buddy
+	9,  // 20: openaim.api.v1.SafetyNumber.buddy:type_name -> openaim.api.v1.Buddy
+	9,  // 21: openaim.api.v1.CheckHandleResponse.buddy:type_name -> openaim.api.v1.Buddy
+	2,  // 22: openaim.api.v1.CheckHandleResponse.result:type_name -> openaim.api.v1.HandleStatus
+	31, // 23: openaim.api.v1.SendIMResponse.message:type_name -> openaim.api.v1.Message
+	3,  // 24: openaim.api.v1.Message.direction:type_name -> openaim.api.v1.Direction
+	43, // 25: openaim.api.v1.Message.sent_at:type_name -> google.protobuf.Timestamp
+	43, // 26: openaim.api.v1.Message.received_at:type_name -> google.protobuf.Timestamp
+	4,  // 27: openaim.api.v1.Message.delivery:type_name -> openaim.api.v1.DeliveryState
+	31, // 28: openaim.api.v1.HistoryResponse.messages:type_name -> openaim.api.v1.Message
+	5,  // 29: openaim.api.v1.Presence.state:type_name -> openaim.api.v1.PresenceState
+	43, // 30: openaim.api.v1.Presence.since:type_name -> google.protobuf.Timestamp
+	5,  // 31: openaim.api.v1.SetPresenceRequest.state:type_name -> openaim.api.v1.PresenceState
+	43, // 32: openaim.api.v1.Event.time:type_name -> google.protobuf.Timestamp
+	38, // 33: openaim.api.v1.Event.ready:type_name -> openaim.api.v1.Ready
+	9,  // 34: openaim.api.v1.Event.buddy_added:type_name -> openaim.api.v1.Buddy
+	9,  // 35: openaim.api.v1.Event.buddy_changed:type_name -> openaim.api.v1.Buddy
+	9,  // 36: openaim.api.v1.Event.buddy_removed:type_name -> openaim.api.v1.Buddy
+	31, // 37: openaim.api.v1.Event.message_queued:type_name -> openaim.api.v1.Message
+	31, // 38: openaim.api.v1.Event.message_received:type_name -> openaim.api.v1.Message
+	34, // 39: openaim.api.v1.Event.presence_changed:type_name -> openaim.api.v1.Presence
+	9,  // 40: openaim.api.v1.Event.buddy_handle_warning:type_name -> openaim.api.v1.Buddy
+	9,  // 41: openaim.api.v1.Event.buddy_request:type_name -> openaim.api.v1.Buddy
+	6,  // 42: openaim.api.v1.Daemon.GetStatus:input_type -> openaim.api.v1.GetStatusRequest
+	12, // 43: openaim.api.v1.Daemon.ListBuddies:input_type -> openaim.api.v1.ListBuddiesRequest
+	14, // 44: openaim.api.v1.Daemon.AddBuddy:input_type -> openaim.api.v1.AddBuddyRequest
+	15, // 45: openaim.api.v1.Daemon.CreateInvite:input_type -> openaim.api.v1.CreateInviteRequest
+	17, // 46: openaim.api.v1.Daemon.AcceptBuddy:input_type -> openaim.api.v1.AcceptBuddyRequest
+	18, // 47: openaim.api.v1.Daemon.DeclineBuddy:input_type -> openaim.api.v1.DeclineBuddyRequest
+	20, // 48: openaim.api.v1.Daemon.BlockBuddy:input_type -> openaim.api.v1.BlockBuddyRequest
+	21, // 49: openaim.api.v1.Daemon.SetBuddyLabels:input_type -> openaim.api.v1.SetBuddyLabelsRequest
+	22, // 50: openaim.api.v1.Daemon.RemoveBuddy:input_type -> openaim.api.v1.RemoveBuddyRequest
+	24, // 51: openaim.api.v1.Daemon.SetBuddyVerified:input_type -> openaim.api.v1.SetBuddyVerifiedRequest
+	25, // 52: openaim.api.v1.Daemon.GetSafetyNumber:input_type -> openaim.api.v1.GetSafetyNumberRequest
+	27, // 53: openaim.api.v1.Daemon.CheckHandle:input_type -> openaim.api.v1.CheckHandleRequest
+	29, // 54: openaim.api.v1.Daemon.SendIM:input_type -> openaim.api.v1.SendIMRequest
+	32, // 55: openaim.api.v1.Daemon.History:input_type -> openaim.api.v1.HistoryRequest
+	35, // 56: openaim.api.v1.Daemon.SetPresence:input_type -> openaim.api.v1.SetPresenceRequest
+	36, // 57: openaim.api.v1.Daemon.SubscribeEvents:input_type -> openaim.api.v1.SubscribeEventsRequest
+	39, // 58: openaim.api.v1.Daemon.ExportBackup:input_type -> openaim.api.v1.ExportBackupRequest
+	41, // 59: openaim.api.v1.Daemon.Shutdown:input_type -> openaim.api.v1.ShutdownRequest
+	7,  // 60: openaim.api.v1.Daemon.GetStatus:output_type -> openaim.api.v1.Status
+	13, // 61: openaim.api.v1.Daemon.ListBuddies:output_type -> openaim.api.v1.ListBuddiesResponse
+	9,  // 62: openaim.api.v1.Daemon.AddBuddy:output_type -> openaim.api.v1.Buddy
+	16, // 63: openaim.api.v1.Daemon.CreateInvite:output_type -> openaim.api.v1.CreateInviteResponse
+	9,  // 64: openaim.api.v1.Daemon.AcceptBuddy:output_type -> openaim.api.v1.Buddy
+	19, // 65: openaim.api.v1.Daemon.DeclineBuddy:output_type -> openaim.api.v1.DeclineBuddyResponse
+	9,  // 66: openaim.api.v1.Daemon.BlockBuddy:output_type -> openaim.api.v1.Buddy
+	9,  // 67: openaim.api.v1.Daemon.SetBuddyLabels:output_type -> openaim.api.v1.Buddy
+	23, // 68: openaim.api.v1.Daemon.RemoveBuddy:output_type -> openaim.api.v1.RemoveBuddyResponse
+	9,  // 69: openaim.api.v1.Daemon.SetBuddyVerified:output_type -> openaim.api.v1.Buddy
+	26, // 70: openaim.api.v1.Daemon.GetSafetyNumber:output_type -> openaim.api.v1.SafetyNumber
+	28, // 71: openaim.api.v1.Daemon.CheckHandle:output_type -> openaim.api.v1.CheckHandleResponse
+	30, // 72: openaim.api.v1.Daemon.SendIM:output_type -> openaim.api.v1.SendIMResponse
+	33, // 73: openaim.api.v1.Daemon.History:output_type -> openaim.api.v1.HistoryResponse
+	34, // 74: openaim.api.v1.Daemon.SetPresence:output_type -> openaim.api.v1.Presence
+	37, // 75: openaim.api.v1.Daemon.SubscribeEvents:output_type -> openaim.api.v1.Event
+	40, // 76: openaim.api.v1.Daemon.ExportBackup:output_type -> openaim.api.v1.ExportBackupResponse
+	42, // 77: openaim.api.v1.Daemon.Shutdown:output_type -> openaim.api.v1.ShutdownResponse
+	60, // [60:78] is the sub-list for method output_type
+	42, // [42:60] is the sub-list for method input_type
+	42, // [42:42] is the sub-list for extension type_name
+	42, // [42:42] is the sub-list for extension extendee
+	0,  // [0:42] is the sub-list for field type_name
 }
 
 func init() { file_openaim_api_v1_api_proto_init() }
@@ -2414,7 +3172,8 @@ func file_openaim_api_v1_api_proto_init() {
 	if File_openaim_api_v1_api_proto != nil {
 		return
 	}
-	file_openaim_api_v1_api_proto_msgTypes[22].OneofWrappers = []any{
+	file_openaim_api_v1_api_proto_msgTypes[15].OneofWrappers = []any{}
+	file_openaim_api_v1_api_proto_msgTypes[31].OneofWrappers = []any{
 		(*Event_Ready)(nil),
 		(*Event_BuddyAdded)(nil),
 		(*Event_BuddyChanged)(nil),
@@ -2423,14 +3182,15 @@ func file_openaim_api_v1_api_proto_init() {
 		(*Event_MessageReceived)(nil),
 		(*Event_PresenceChanged)(nil),
 		(*Event_BuddyHandleWarning)(nil),
+		(*Event_BuddyRequest)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_openaim_api_v1_api_proto_rawDesc), len(file_openaim_api_v1_api_proto_rawDesc)),
-			NumEnums:      5,
-			NumMessages:   28,
+			NumEnums:      6,
+			NumMessages:   37,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -18,6 +18,7 @@ import (
 
 	"github.com/aghman/openaim/internal/handle"
 	"github.com/aghman/openaim/internal/identity"
+	"github.com/aghman/openaim/internal/invite"
 	"github.com/aghman/openaim/internal/store"
 )
 
@@ -259,6 +260,10 @@ func TestAddBuddyByHandlePins(t *testing.T) {
 		t.Fatalf("check %+v", c)
 	}
 	within(t, "next check", c.NextCheck, t0, 26*day, 34*day)
+	// The request goes to the verified record's inbox hint.
+	if a.Request == nil || a.Request.ContactHint != "/dns/inbox.example.com/tcp/4001" || !errors.Is(a.RequestErr, ErrNoSink) {
+		t.Fatalf("request %+v %v", a.Request, a.RequestErr)
+	}
 	if e := nextEvent(t, sub); e.Kind != EventBuddyAdded || e.Buddy.Handle != alice || e.HandleCheck == nil || e.HandleCheck.Status != store.HandleVerified {
 		t.Fatalf("event %+v", e)
 	}
@@ -347,6 +352,32 @@ func TestAddByKeyWithClaimedHandle(t *testing.T) {
 	// A malformed claimed handle is a bad request, not a silent drop.
 	if _, err := h.AddBuddyWith(ctx, AddBuddyOptions{Key: peer(t, 5).Public().String(), Handle: "bad handle"}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("malformed claim: %v", err)
+	}
+}
+
+func TestAddByInviteWithHandle(t *testing.T) {
+	h := newHandleNode(t)
+	erin := peer(t, 6)
+	h.dns.publish("erin.example.com", erin, "/dns/inbox.example.com/tcp/4001/p2p/"+testPeerID(t, 9))
+	circuit := "/dns4/relay.example.net/tcp/4001/p2p/" + testPeerID(t, 1) + "/p2p-circuit"
+	link := invite.Invite{Key: erin.Public(), Handle: "erin.example.com", Contact: circuit}.String()
+	// The handle and key must agree with the link.
+	if _, err := h.AddBuddyWith(ctx, AddBuddyOptions{Invite: link, Handle: "other.example.com"}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("conflicting handle: %v", err)
+	}
+	a, err := h.AddBuddyWith(ctx, AddBuddyOptions{Invite: link})
+	if err != nil || a.Buddy.Key != erin.Public() || a.Buddy.Handle != "erin.example.com" || a.Check == nil {
+		t.Fatalf("add by invite with handle %+v %v", a, err)
+	}
+	// The invite's contact hint wins over the record's inbox hint.
+	if a.Request.ContactHint != circuit {
+		t.Fatalf("contact hint %q", a.Request.ContactHint)
+	}
+	// A claimed handle that proves another key is dropped, as for a key.
+	frank := peer(t, 7)
+	link = invite.Invite{Key: frank.Public(), Handle: "erin.example.com"}.String()
+	if a, err = h.AddBuddyWith(ctx, AddBuddyOptions{Invite: link}); err != nil || a.Buddy.Handle != "" || !errors.Is(a.HandleDropped, ErrHandleUnverified) {
+		t.Fatalf("invite claiming someone's handle %+v %v", a, err)
 	}
 }
 

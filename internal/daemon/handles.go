@@ -10,9 +10,14 @@ import (
 	"sync"
 	"time"
 
+	ma "github.com/multiformats/go-multiaddr"
+
+	"github.com/aghman/openaim/internal/body"
 	"github.com/aghman/openaim/internal/handle"
 	"github.com/aghman/openaim/internal/identity"
+	"github.com/aghman/openaim/internal/invite"
 	"github.com/aghman/openaim/internal/store"
+	pb "github.com/aghman/openaim/internal/wirepb"
 )
 
 // Handle errors. The API maps ErrHandleUnverified and ErrNoHandle to
@@ -378,13 +383,19 @@ func (n *Node) stopHandleLoop() {
 	}
 }
 
-// AddBuddyOptions says how to add a buddy: by Key, by Handle, or by Key
-// with a claimed Handle.
+// AddBuddyOptions says how to add a buddy: by Key, by Handle, by Key with a
+// claimed Handle, or by Invite link.
 type AddBuddyOptions struct {
 	Key     string // base32 identity key
 	Handle  string // user input; normalized
 	Petname string
 	Group   string
+	// Invite is an invite link (internal/invite). It names the key, and may
+	// claim a handle and give a contact hint for the request. Key and
+	// Handle, if also given, must agree with it.
+	Invite string
+	// Greeting goes in the request (≤ 256 bytes, spec/wire.md §6.1).
+	Greeting string
 }
 
 // AddedBuddy is the result of AddBuddyWith.
@@ -394,22 +405,60 @@ type AddedBuddy struct {
 	// HandleDropped says why a claimed handle wasn't kept, when a buddy
 	// added by key came with one that didn't verify for that key.
 	HandleDropped error
+	// Accepted says the key had already asked us (pending_in), so adding it
+	// accepted their request instead of sending one.
+	Accepted bool
+	// Request is the request sealed to the buddy (without frames), unless
+	// Accepted. RequestErr says why handing it to the transports failed
+	// (ErrNoSink when none is attached); it stays queued either way.
+	Request    *store.OutRequest
+	RequestErr error
 }
 
 // AddBuddyWith adds a buddy (design §5.3 rule 4: the buddy is the key; a
-// handle is a label on it, kept only once verified).
+// handle is a label on it, kept only once verified), and asks them to be our
+// buddy (design §5.4).
 //
-//   - By key alone: as AddBuddy.
+//   - By key alone: that key.
 //   - By handle alone: the handle is verified and the key it proves is
 //     pinned. A handle that doesn't verify fails with ErrHandleUnverified or
 //     ErrHandleUnreachable.
 //   - By key and handle: the key is added; the handle is kept only if it
 //     verifies and proves that key. Otherwise HandleDropped says why.
+//   - By invite link: as by key, with the link's handle (if any) as the
+//     claimed handle and its contact hint as where to send the request.
 //
-// The inbox hint of a verified record is stored for first contact.
-//
-// TODO(first-contact): use the inbox hint to send FIRST_CONTACT.
+// The buddy starts pending_out, and a BUDDY_REQUEST is sealed once as a
+// FIRST_CONTACT, persisted with the buddy and handed to the transports. It
+// goes to the invite's contact hint, else the verified handle record's inbox
+// hint, else wherever the transports can find the key. If the key is
+// already pending_in (they asked first), adding it accepts their request.
 func (n *Node) AddBuddyWith(ctx context.Context, o AddBuddyOptions) (AddedBuddy, error) {
+	var contact string
+	if strings.TrimSpace(o.Invite) != "" {
+		in, err := invite.Parse(o.Invite)
+		if err != nil {
+			return AddedBuddy{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+		}
+		if kt := strings.TrimSpace(o.Key); kt != "" {
+			if k, err := identity.ParsePublicKeyString(kt); err != nil || k != in.Key {
+				return AddedBuddy{}, fmt.Errorf("%w: the identity key and the invite link name different keys", ErrInvalid)
+			}
+		}
+		if strings.TrimSpace(o.Handle) != "" && in.Handle != "" {
+			if h, err := handle.Normalize(o.Handle); err != nil || h != in.Handle {
+				return AddedBuddy{}, fmt.Errorf("%w: the handle and the invite link's handle differ", ErrInvalid)
+			}
+		}
+		o.Key = in.Key.String()
+		if strings.TrimSpace(o.Handle) == "" {
+			o.Handle = in.Handle
+		}
+		contact = in.Contact
+	}
+	if err := body.Validate(&pb.BuddyRequest{Greeting: o.Greeting}); err != nil {
+		return AddedBuddy{}, fmt.Errorf("%w: greeting: %v", ErrInvalid, err)
+	}
 	var h string
 	if strings.TrimSpace(o.Handle) != "" {
 		var err error
@@ -419,7 +468,7 @@ func (n *Node) AddBuddyWith(ctx context.Context, o AddBuddyOptions) (AddedBuddy,
 	}
 	keyText := strings.TrimSpace(o.Key)
 	if keyText == "" && h == "" {
-		return AddedBuddy{}, fmt.Errorf("%w: give an identity key or a handle", ErrInvalid)
+		return AddedBuddy{}, fmt.Errorf("%w: give an identity key, a handle or an invite link", ErrInvalid)
 	}
 	if err := checkLabel("petname", o.Petname); err != nil {
 		return AddedBuddy{}, err
@@ -433,8 +482,8 @@ func (n *Node) AddBuddyWith(ctx context.Context, o AddBuddyOptions) (AddedBuddy,
 		if k, err = n.checkBuddyKey(keyText); err != nil {
 			return AddedBuddy{}, err
 		}
-		if _, err := n.store.BuddyByKey(ctx, k); err == nil {
-			return AddedBuddy{}, ErrDuplicate
+		if ex, err := n.store.BuddyByKey(ctx, k); err == nil {
+			return n.addExisting(ctx, ex, o)
 		}
 	}
 
@@ -454,6 +503,9 @@ func (n *Node) AddBuddyWith(ctx context.Context, o AddBuddyOptions) (AddedBuddy,
 			if k, err = n.checkBuddyKey(res.Key.String()); err != nil {
 				return AddedBuddy{}, err
 			}
+			if ex, err := n.store.BuddyByKey(ctx, k); err == nil {
+				return n.addExisting(ctx, ex, o)
+			}
 		case res.Key != k:
 			dropped = fmt.Errorf("%w: %s points to a different key (%s), not %s", ErrHandleUnverified, h, res.Key.KeyID(), k.KeyID())
 		}
@@ -462,39 +514,83 @@ func (n *Node) AddBuddyWith(ctx context.Context, o AddBuddyOptions) (AddedBuddy,
 			check = &c
 		}
 	}
-
-	b := store.Buddy{Key: k, Petname: o.Petname, Group: o.Group, State: store.PendingOut, AddedAt: n.now()}
-	n.writeMu.Lock()
-	defer n.writeMu.Unlock()
-	var id int64
-	var err error
-	if check != nil {
-		b.Handle = h
-		id, err = n.store.AddBuddyWithHandleCheck(ctx, b, *check)
-	} else {
-		id, err = n.store.AddBuddy(ctx, b)
+	if contact == "" && check != nil && check.InboxHint != "" {
+		if a, err := ma.NewMultiaddr(check.InboxHint); err == nil {
+			contact = a.String()
+		} else {
+			n.log.Warn("handle's inbox hint is not a multiaddr; ignoring it", "handle", h, "err", err)
+		}
 	}
+	req, err := n.sealRequest(k, o.Greeting, contact)
 	if err != nil {
 		return AddedBuddy{}, err
 	}
+
+	b := store.Buddy{Key: k, Petname: o.Petname, Group: o.Group, State: store.PendingOut, AddedAt: n.now()}
+	if check != nil {
+		b.Handle = h
+	}
+	n.writeMu.Lock()
+	id, err := n.store.AddBuddyRequesting(ctx, b, check, req)
+	if err != nil {
+		n.writeMu.Unlock()
+		return AddedBuddy{}, err
+	}
 	if b, err = n.store.Buddy(ctx, id); err != nil {
+		n.writeMu.Unlock()
 		return AddedBuddy{}, err
 	}
 	if check != nil {
 		check.BuddyID = id
 	}
 	if err := n.trackBuddy(b); err != nil {
+		n.writeMu.Unlock()
 		return AddedBuddy{Buddy: b, Check: check}, err
 	}
 	if dropped != nil {
 		n.log.Warn("claimed handle dropped", "buddy", b.Key.KeyID(), "handle", h, "err", dropped)
 	}
-	n.log.Info("buddy added", "buddy", b.Key.KeyID(), "petname", b.Petname, "handle", b.Handle)
-	n.events.publish(Event{Kind: EventBuddyAdded, Buddy: &b, HandleCheck: check})
+	n.log.Info("buddy added; request sealed", "buddy", b.Key.KeyID(), "petname", b.Petname, "handle", b.Handle,
+		"contact_hint", contact != "", "layout", req.Layout, "fragments", len(req.Frames))
+	n.events.publish(Event{Kind: EventBuddyAdded, Buddy: &b, HandleCheck: check, Details: n.detailsOrNil(ctx, b)})
+	n.writeMu.Unlock()
 	if check != nil {
 		n.WakeHandleChecks() // reschedule the loop around the new check
 	}
-	return AddedBuddy{Buddy: b, Check: check, HandleDropped: dropped}, nil
+	sendErr := n.sendRequest(ctx, k, req)
+	shown := *req
+	shown.Frames = nil
+	if cur, err := n.store.Requests(ctx, id); err == nil && len(cur) > 0 {
+		shown = *cur[len(cur)-1]
+		shown.Frames = nil
+	}
+	return AddedBuddy{Buddy: b, Check: check, HandleDropped: dropped, Request: &shown, RequestErr: sendErr}, nil
+}
+
+// addExisting handles adding a key that is already on the list: a
+// pending_in one is accepted (with the labels given), anything else is a
+// duplicate.
+func (n *Node) addExisting(ctx context.Context, ex store.Buddy, o AddBuddyOptions) (AddedBuddy, error) {
+	if ex.State != store.PendingIn {
+		return AddedBuddy{}, ErrDuplicate
+	}
+	if o.Petname != "" || o.Group != "" {
+		var pet, grp *string
+		if o.Petname != "" {
+			pet = &o.Petname
+		}
+		if o.Group != "" {
+			grp = &o.Group
+		}
+		if _, err := n.SetBuddyLabels(ctx, ex.Key.String(), pet, grp); err != nil {
+			return AddedBuddy{}, err
+		}
+	}
+	b, err := n.AcceptBuddy(ctx, ex.Key.String())
+	if err != nil {
+		return AddedBuddy{}, err
+	}
+	return AddedBuddy{Buddy: b, Check: n.handleCheckOrNil(ctx, b), Accepted: true}, nil
 }
 
 // checkBuddyKey parses a buddy's key and checks it can be one.

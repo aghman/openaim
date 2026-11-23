@@ -44,7 +44,7 @@ func (s *server) rpcError(method string, err error) error {
 	case errors.Is(err, daemon.ErrDuplicate):
 		return status.Error(codes.AlreadyExists, err.Error())
 	case errors.Is(err, daemon.ErrBlocked), errors.Is(err, daemon.ErrNoHandle), errors.Is(err, daemon.ErrHandleUnverified),
-		errors.Is(err, daemon.ErrBackupMismatch):
+		errors.Is(err, daemon.ErrBackupMismatch), errors.Is(err, daemon.ErrNotPending):
 		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, daemon.ErrHandleUnreachable):
 		return status.Error(codes.Unavailable, err.Error())
@@ -99,7 +99,11 @@ func (s *server) ListBuddies(ctx context.Context, _ *pb.ListBuddiesRequest) (*pb
 		if c, ok := checks[b.ID]; ok {
 			hc = &c
 		}
-		out.Buddies[i] = s.buddyPB(b, hc)
+		det, err := s.n.Details(ctx, b)
+		if err != nil {
+			return nil, s.rpcError("ListBuddies", err)
+		}
+		out.Buddies[i] = s.buddyPB(b, hc, det)
 	}
 	return out, nil
 }
@@ -107,11 +111,16 @@ func (s *server) ListBuddies(ctx context.Context, _ *pb.ListBuddiesRequest) (*pb
 func (s *server) AddBuddy(ctx context.Context, req *pb.AddBuddyRequest) (*pb.Buddy, error) {
 	a, err := s.n.AddBuddyWith(ctx, daemon.AddBuddyOptions{
 		Key: req.GetIdentityKey(), Handle: req.GetHandle(), Petname: req.GetPetname(), Group: req.GetGroup(),
+		Invite: req.GetInviteLink(), Greeting: req.GetGreeting(),
 	})
 	if err != nil {
 		return nil, s.rpcError("AddBuddy", err)
 	}
-	out := s.buddyPB(a.Buddy, a.Check)
+	det, err := s.n.Details(ctx, a.Buddy)
+	if err != nil {
+		return nil, s.rpcError("AddBuddy", err)
+	}
+	out := s.buddyPB(a.Buddy, a.Check, det)
 	if a.HandleDropped != nil {
 		out.HandleError = a.HandleDropped.Error()
 	}
@@ -123,7 +132,54 @@ func (s *server) CheckHandle(ctx context.Context, req *pb.CheckHandleRequest) (*
 	if err != nil {
 		return nil, s.rpcError("CheckHandle", err)
 	}
-	return &pb.CheckHandleResponse{Buddy: s.buddyPB(r.Buddy, &r.Check), Result: handleStatuses[r.Result]}, nil
+	det, err := s.n.Details(ctx, r.Buddy)
+	if err != nil {
+		return nil, s.rpcError("CheckHandle", err)
+	}
+	return &pb.CheckHandleResponse{Buddy: s.buddyPB(r.Buddy, &r.Check, det), Result: handleStatuses[r.Result]}, nil
+}
+
+func (s *server) CreateInvite(_ context.Context, req *pb.CreateInviteRequest) (*pb.CreateInviteResponse, error) {
+	inv, err := s.n.CreateInvite(daemon.InviteOptions{Handle: req.GetHandle(), ContactHint: req.GetContactHint()})
+	if err != nil {
+		return nil, s.rpcError("CreateInvite", err)
+	}
+	return &pb.CreateInviteResponse{Link: inv.Link, IdentityKey: inv.Invite.Key.String(), Handle: inv.Invite.Handle,
+		ContactHint: inv.Invite.Contact, Note: inv.Note}, nil
+}
+
+func (s *server) AcceptBuddy(ctx context.Context, req *pb.AcceptBuddyRequest) (*pb.Buddy, error) {
+	b, err := s.n.AcceptBuddy(ctx, req.GetBuddy())
+	if err != nil {
+		return nil, s.rpcError("AcceptBuddy", err)
+	}
+	out, err := s.buddyWithCheck(ctx, b)
+	return out, s.rpcError("AcceptBuddy", err)
+}
+
+func (s *server) DeclineBuddy(ctx context.Context, req *pb.DeclineBuddyRequest) (*pb.DeclineBuddyResponse, error) {
+	if _, err := s.n.DeclineBuddy(ctx, req.GetBuddy()); err != nil {
+		return nil, s.rpcError("DeclineBuddy", err)
+	}
+	return &pb.DeclineBuddyResponse{}, nil
+}
+
+func (s *server) BlockBuddy(ctx context.Context, req *pb.BlockBuddyRequest) (*pb.Buddy, error) {
+	b, err := s.n.BlockBuddy(ctx, req.GetBuddy())
+	if err != nil {
+		return nil, s.rpcError("BlockBuddy", err)
+	}
+	out, err := s.buddyWithCheck(ctx, b)
+	return out, s.rpcError("BlockBuddy", err)
+}
+
+func (s *server) SetBuddyLabels(ctx context.Context, req *pb.SetBuddyLabelsRequest) (*pb.Buddy, error) {
+	b, err := s.n.SetBuddyLabels(ctx, req.GetBuddy(), req.Petname, req.Group)
+	if err != nil {
+		return nil, s.rpcError("SetBuddyLabels", err)
+	}
+	out, err := s.buddyWithCheck(ctx, b)
+	return out, s.rpcError("SetBuddyLabels", err)
 }
 
 func (s *server) RemoveBuddy(ctx context.Context, req *pb.RemoveBuddyRequest) (*pb.RemoveBuddyResponse, error) {

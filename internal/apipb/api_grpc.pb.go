@@ -45,6 +45,11 @@ const (
 	Daemon_GetStatus_FullMethodName        = "/openaim.api.v1.Daemon/GetStatus"
 	Daemon_ListBuddies_FullMethodName      = "/openaim.api.v1.Daemon/ListBuddies"
 	Daemon_AddBuddy_FullMethodName         = "/openaim.api.v1.Daemon/AddBuddy"
+	Daemon_CreateInvite_FullMethodName     = "/openaim.api.v1.Daemon/CreateInvite"
+	Daemon_AcceptBuddy_FullMethodName      = "/openaim.api.v1.Daemon/AcceptBuddy"
+	Daemon_DeclineBuddy_FullMethodName     = "/openaim.api.v1.Daemon/DeclineBuddy"
+	Daemon_BlockBuddy_FullMethodName       = "/openaim.api.v1.Daemon/BlockBuddy"
+	Daemon_SetBuddyLabels_FullMethodName   = "/openaim.api.v1.Daemon/SetBuddyLabels"
 	Daemon_RemoveBuddy_FullMethodName      = "/openaim.api.v1.Daemon/RemoveBuddy"
 	Daemon_SetBuddyVerified_FullMethodName = "/openaim.api.v1.Daemon/SetBuddyVerified"
 	Daemon_GetSafetyNumber_FullMethodName  = "/openaim.api.v1.Daemon/GetSafetyNumber"
@@ -65,10 +70,32 @@ type DaemonClient interface {
 	GetStatus(ctx context.Context, in *GetStatusRequest, opts ...grpc.CallOption) (*Status, error)
 	// The whole buddy list, by group then name (`openaim buddies`).
 	ListBuddies(ctx context.Context, in *ListBuddiesRequest, opts ...grpc.CallOption) (*ListBuddiesResponse, error)
-	// Adds a buddy by identity key or by handle (see AddBuddyRequest). The
-	// buddy starts in BUDDY_STATE_PENDING_OUT. M1 skeleton: no first-contact
-	// request is sent yet (design §5.4).
+	// Adds a buddy by identity key, handle or invite link (see
+	// AddBuddyRequest) and asks them to be our buddy (design §5.4): a
+	// BUDDY_REQUEST is sealed once as a first contact, stored, and handed to
+	// the transports (it stays queued while none is attached). The buddy
+	// starts in BUDDY_STATE_PENDING_OUT. Adding a key that already asked us
+	// (PENDING_IN) accepts their request instead.
 	AddBuddy(ctx context.Context, in *AddBuddyRequest, opts ...grpc.CallOption) (*Buddy, error)
+	// Our invite link, openaim:add/<key>?h=<handle>&c=<contact hint>
+	// (design §5.4), to share or show as a QR code.
+	CreateInvite(ctx context.Context, in *CreateInviteRequest, opts ...grpc.CallOption) (*CreateInviteResponse, error)
+	// Accepts a PENDING_IN buddy's request: the buddy becomes ACCEPTED and
+	// gets a BUDDY_ACCEPT with our presence key and reachability. Nothing
+	// about our presence is shared before this. FAILED_PRECONDITION for a
+	// PENDING_OUT (they haven't asked) or BLOCKED buddy. On an ACCEPTED buddy
+	// it sends BUDDY_ACCEPT again.
+	AcceptBuddy(ctx context.Context, in *AcceptBuddyRequest, opts ...grpc.CallOption) (*Buddy, error)
+	// Declines a PENDING_IN buddy's request: it is deleted and nothing is
+	// sent. They can ask again; BlockBuddy stops that. FAILED_PRECONDITION if
+	// the buddy isn't PENDING_IN.
+	DeclineBuddy(ctx context.Context, in *DeclineBuddyRequest, opts ...grpc.CallOption) (*DeclineBuddyResponse, error)
+	// Blocks a buddy in any state (design §7.5): their frames and requests
+	// are dropped unprocessed and nothing more is sent to them. Remove the
+	// buddy to unblock.
+	BlockBuddy(ctx context.Context, in *BlockBuddyRequest, opts ...grpc.CallOption) (*Buddy, error)
+	// Sets a buddy's petname and/or group (local labels).
+	SetBuddyLabels(ctx context.Context, in *SetBuddyLabelsRequest, opts ...grpc.CallOption) (*Buddy, error)
 	// Removes a buddy with its queued messages and history.
 	RemoveBuddy(ctx context.Context, in *RemoveBuddyRequest, opts ...grpc.CallOption) (*RemoveBuddyResponse, error)
 	// Records that the user checked (or un-checked) the buddy's safety number.
@@ -133,6 +160,56 @@ func (c *daemonClient) AddBuddy(ctx context.Context, in *AddBuddyRequest, opts .
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Buddy)
 	err := c.cc.Invoke(ctx, Daemon_AddBuddy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonClient) CreateInvite(ctx context.Context, in *CreateInviteRequest, opts ...grpc.CallOption) (*CreateInviteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateInviteResponse)
+	err := c.cc.Invoke(ctx, Daemon_CreateInvite_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonClient) AcceptBuddy(ctx context.Context, in *AcceptBuddyRequest, opts ...grpc.CallOption) (*Buddy, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Buddy)
+	err := c.cc.Invoke(ctx, Daemon_AcceptBuddy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonClient) DeclineBuddy(ctx context.Context, in *DeclineBuddyRequest, opts ...grpc.CallOption) (*DeclineBuddyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeclineBuddyResponse)
+	err := c.cc.Invoke(ctx, Daemon_DeclineBuddy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonClient) BlockBuddy(ctx context.Context, in *BlockBuddyRequest, opts ...grpc.CallOption) (*Buddy, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Buddy)
+	err := c.cc.Invoke(ctx, Daemon_BlockBuddy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonClient) SetBuddyLabels(ctx context.Context, in *SetBuddyLabelsRequest, opts ...grpc.CallOption) (*Buddy, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Buddy)
+	err := c.cc.Invoke(ctx, Daemon_SetBuddyLabels_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -256,10 +333,32 @@ type DaemonServer interface {
 	GetStatus(context.Context, *GetStatusRequest) (*Status, error)
 	// The whole buddy list, by group then name (`openaim buddies`).
 	ListBuddies(context.Context, *ListBuddiesRequest) (*ListBuddiesResponse, error)
-	// Adds a buddy by identity key or by handle (see AddBuddyRequest). The
-	// buddy starts in BUDDY_STATE_PENDING_OUT. M1 skeleton: no first-contact
-	// request is sent yet (design §5.4).
+	// Adds a buddy by identity key, handle or invite link (see
+	// AddBuddyRequest) and asks them to be our buddy (design §5.4): a
+	// BUDDY_REQUEST is sealed once as a first contact, stored, and handed to
+	// the transports (it stays queued while none is attached). The buddy
+	// starts in BUDDY_STATE_PENDING_OUT. Adding a key that already asked us
+	// (PENDING_IN) accepts their request instead.
 	AddBuddy(context.Context, *AddBuddyRequest) (*Buddy, error)
+	// Our invite link, openaim:add/<key>?h=<handle>&c=<contact hint>
+	// (design §5.4), to share or show as a QR code.
+	CreateInvite(context.Context, *CreateInviteRequest) (*CreateInviteResponse, error)
+	// Accepts a PENDING_IN buddy's request: the buddy becomes ACCEPTED and
+	// gets a BUDDY_ACCEPT with our presence key and reachability. Nothing
+	// about our presence is shared before this. FAILED_PRECONDITION for a
+	// PENDING_OUT (they haven't asked) or BLOCKED buddy. On an ACCEPTED buddy
+	// it sends BUDDY_ACCEPT again.
+	AcceptBuddy(context.Context, *AcceptBuddyRequest) (*Buddy, error)
+	// Declines a PENDING_IN buddy's request: it is deleted and nothing is
+	// sent. They can ask again; BlockBuddy stops that. FAILED_PRECONDITION if
+	// the buddy isn't PENDING_IN.
+	DeclineBuddy(context.Context, *DeclineBuddyRequest) (*DeclineBuddyResponse, error)
+	// Blocks a buddy in any state (design §7.5): their frames and requests
+	// are dropped unprocessed and nothing more is sent to them. Remove the
+	// buddy to unblock.
+	BlockBuddy(context.Context, *BlockBuddyRequest) (*Buddy, error)
+	// Sets a buddy's petname and/or group (local labels).
+	SetBuddyLabels(context.Context, *SetBuddyLabelsRequest) (*Buddy, error)
 	// Removes a buddy with its queued messages and history.
 	RemoveBuddy(context.Context, *RemoveBuddyRequest) (*RemoveBuddyResponse, error)
 	// Records that the user checked (or un-checked) the buddy's safety number.
@@ -308,6 +407,21 @@ func (UnimplementedDaemonServer) ListBuddies(context.Context, *ListBuddiesReques
 }
 func (UnimplementedDaemonServer) AddBuddy(context.Context, *AddBuddyRequest) (*Buddy, error) {
 	return nil, status.Error(codes.Unimplemented, "method AddBuddy not implemented")
+}
+func (UnimplementedDaemonServer) CreateInvite(context.Context, *CreateInviteRequest) (*CreateInviteResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateInvite not implemented")
+}
+func (UnimplementedDaemonServer) AcceptBuddy(context.Context, *AcceptBuddyRequest) (*Buddy, error) {
+	return nil, status.Error(codes.Unimplemented, "method AcceptBuddy not implemented")
+}
+func (UnimplementedDaemonServer) DeclineBuddy(context.Context, *DeclineBuddyRequest) (*DeclineBuddyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeclineBuddy not implemented")
+}
+func (UnimplementedDaemonServer) BlockBuddy(context.Context, *BlockBuddyRequest) (*Buddy, error) {
+	return nil, status.Error(codes.Unimplemented, "method BlockBuddy not implemented")
+}
+func (UnimplementedDaemonServer) SetBuddyLabels(context.Context, *SetBuddyLabelsRequest) (*Buddy, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetBuddyLabels not implemented")
 }
 func (UnimplementedDaemonServer) RemoveBuddy(context.Context, *RemoveBuddyRequest) (*RemoveBuddyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RemoveBuddy not implemented")
@@ -410,6 +524,96 @@ func _Daemon_AddBuddy_Handler(srv interface{}, ctx context.Context, dec func(int
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaemonServer).AddBuddy(ctx, req.(*AddBuddyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Daemon_CreateInvite_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateInviteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).CreateInvite(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Daemon_CreateInvite_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).CreateInvite(ctx, req.(*CreateInviteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Daemon_AcceptBuddy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AcceptBuddyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).AcceptBuddy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Daemon_AcceptBuddy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).AcceptBuddy(ctx, req.(*AcceptBuddyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Daemon_DeclineBuddy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeclineBuddyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).DeclineBuddy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Daemon_DeclineBuddy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).DeclineBuddy(ctx, req.(*DeclineBuddyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Daemon_BlockBuddy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BlockBuddyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).BlockBuddy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Daemon_BlockBuddy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).BlockBuddy(ctx, req.(*BlockBuddyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Daemon_SetBuddyLabels_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetBuddyLabelsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).SetBuddyLabels(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Daemon_SetBuddyLabels_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).SetBuddyLabels(ctx, req.(*SetBuddyLabelsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -605,6 +809,26 @@ var Daemon_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AddBuddy",
 			Handler:    _Daemon_AddBuddy_Handler,
+		},
+		{
+			MethodName: "CreateInvite",
+			Handler:    _Daemon_CreateInvite_Handler,
+		},
+		{
+			MethodName: "AcceptBuddy",
+			Handler:    _Daemon_AcceptBuddy_Handler,
+		},
+		{
+			MethodName: "DeclineBuddy",
+			Handler:    _Daemon_DeclineBuddy_Handler,
+		},
+		{
+			MethodName: "BlockBuddy",
+			Handler:    _Daemon_BlockBuddy_Handler,
+		},
+		{
+			MethodName: "SetBuddyLabels",
+			Handler:    _Daemon_SetBuddyLabels_Handler,
 		},
 		{
 			MethodName: "RemoveBuddy",

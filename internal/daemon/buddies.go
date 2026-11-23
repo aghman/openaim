@@ -101,12 +101,9 @@ func (n *Node) FindBuddy(ctx context.Context, sel string) (store.Buddy, error) {
 	return store.Buddy{}, fmt.Errorf("%w: %q", ErrUnknownBuddy, sel)
 }
 
-// AddBuddy adds a buddy by identity key (base32). The buddy starts as
-// pending_out: we've asked, they haven't accepted. AddBuddyWith also adds
-// by handle.
-//
-// TODO(first-contact): send the FIRST_CONTACT request (design §5.4, §8.5)
-// once transports exist. For now the buddy is only recorded.
+// AddBuddy adds a buddy by identity key (base32) and sends them a request.
+// The buddy starts as pending_out: we've asked, they haven't accepted.
+// AddBuddyWith also adds by handle or invite link.
 func (n *Node) AddBuddy(ctx context.Context, key, petname, group string) (store.Buddy, error) {
 	if strings.TrimSpace(key) == "" {
 		return store.Buddy{}, fmt.Errorf("%w: no identity key", ErrInvalid)

@@ -30,6 +30,7 @@ import (
 	"github.com/aghman/openaim/internal/daemon"
 	"github.com/aghman/openaim/internal/handle"
 	"github.com/aghman/openaim/internal/identity"
+	"github.com/aghman/openaim/internal/invite"
 	"github.com/aghman/openaim/internal/keystore"
 )
 
@@ -268,6 +269,10 @@ func runDaemon(ctx context.Context, args []string, e env) error {
 		"; must match what init chose, and auto accepts it (default: what init chose)")
 	socket := fs.String("socket", "", "API socket path (default: openaimd.sock in the data dir)")
 	registry := fs.String("registry", "", "default handle registry domain: handles one label under it show as just that label (default: none)")
+	displayName := fs.String("display-name", "", "the name your buddy requests and accepts offer (at most 64 bytes)")
+	contactHint := fs.String("contact-hint", "", "contact hint for invite links: a relay-circuit or mailbox multiaddr, never your own IP address")
+	fcRate := fs.Float64("first-contact-rate", daemon.DefaultFirstContactRate, "incoming first-contact frames allowed per second, per transport")
+	fcBurst := fs.Int("first-contact-burst", daemon.DefaultFirstContactBurst, "incoming first-contact frames allowed in a burst, per transport")
 	var resolvers []string
 	fs.Func("doh-resolver", "DNS-over-HTTPS resolver URL for handle lookups; repeat for each (at least two; default: "+
 		strings.Join(handle.DefaultResolvers, ", ")+")", func(s string) error {
@@ -289,12 +294,25 @@ func runDaemon(ctx context.Context, args []string, e env) error {
 	if err != nil {
 		return err
 	}
+	var hint func() string
+	if *contactHint != "" {
+		a, err := invite.CheckContactHint(*contactHint)
+		if err != nil {
+			return fmt.Errorf("--contact-hint: %w", err)
+		}
+		s := a.String()
+		hint = func() string { return s }
+	}
+	if *fcRate <= 0 || *fcBurst <= 0 {
+		return errors.New("--first-contact-rate and --first-contact-burst must be positive")
+	}
 	err = api.Run(ctx, api.Config{
 		Config: daemon.Config{
 			DataDir: dir, Keystore: mode, KeystoreParams: keystoreParams, Logger: log,
 			// Asked only if the identity uses the file keystore.
 			PassphraseFunc: func() ([]byte, error) { return c.passphrase(e, false) },
 			HandleRegistry: *registry, DoHResolvers: resolvers,
+			DisplayName: *displayName, ContactHint: hint, FirstContactRate: *fcRate, FirstContactBurst: *fcBurst,
 		},
 		SocketPath: *socket,
 	})

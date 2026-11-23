@@ -179,6 +179,13 @@ func TestRunErrors(t *testing.T) {
 	if r := runCmd(ctx, "", map[string]string{EnvPassphrase: "x"}, "run", "--data-dir", dir, "--registry", "-bad-"); r.code != 1 || !strings.Contains(r.stderr, "registry") {
 		t.Fatalf("bad registry: %+v", r)
 	}
+	// Invite contact hints never name our own IP address.
+	if r := runCmd(ctx, "", map[string]string{EnvPassphrase: "x"}, "run", "--data-dir", dir, "--contact-hint", "/ip4/203.0.113.9/tcp/4001"); r.code != 1 || !strings.Contains(r.stderr, "--contact-hint") {
+		t.Fatalf("home IP contact hint: %+v", r)
+	}
+	if r := runCmd(ctx, "", map[string]string{EnvPassphrase: "x"}, "run", "--data-dir", dir, "--first-contact-burst", "0"); r.code != 1 {
+		t.Fatalf("zero burst: %+v", r)
+	}
 	if r := runCmd(ctx, "", nil, "frobnicate"); r.code != 2 {
 		t.Fatalf("unknown command: %+v", r)
 	}

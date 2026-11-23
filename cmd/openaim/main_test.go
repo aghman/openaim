@@ -15,11 +15,13 @@ import (
 	"time"
 
 	"github.com/aghman/openaim/internal/api"
+	"github.com/aghman/openaim/internal/body"
 	"github.com/aghman/openaim/internal/daemon"
 	"github.com/aghman/openaim/internal/frame"
 	"github.com/aghman/openaim/internal/identity"
 	"github.com/aghman/openaim/internal/keystore"
 	"github.com/aghman/openaim/internal/store"
+	wpb "github.com/aghman/openaim/internal/wirepb"
 )
 
 // fast Argon2id costs (the minimum the keystore accepts).
@@ -822,4 +824,76 @@ func TestCleaning(t *testing.T) {
 	if got := safetyGroups("odd\x1b"); len(got) != 1 || got[0] != "odd\uFFFD" {
 		t.Errorf("safetyGroups odd = %q", got)
 	}
+}
+
+// requestFrom seals a BUDDY_REQUEST from id to me, as id's daemon would.
+func requestFrom(t *testing.T, id *identity.Identity, me identity.PublicKey, name, greeting string) [][]byte {
+	t.Helper()
+	_, b, err := body.Marshal(&wpb.BuddyRequest{DisplayName: name, Greeting: greeting})
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := frame.Inner{Type: frame.BuddyRequest, Time: frame.Timestamp(time.Now()), Body: b}
+	s, err := frame.SealFirstContact(id, me, frame.LayoutMesh, in.Marshal(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s.Frames
+}
+
+func TestRequestCommands(t *testing.T) {
+	t.Parallel()
+	x := newH(t)
+
+	r := x.cli(opts{}, "invite")
+	if r.code != 0 || !strings.HasPrefix(r.stdout, "openaim:add/"+x.me.Public().String()) || !strings.Contains(r.stderr, "no contact hint") {
+		t.Fatalf("invite: %+v", r)
+	}
+	m := jsonObj(t, x.ok("--json", "invite", "--handle", "me.example.com").stdout)
+	if m["handle"] != "me.example.com" || !strings.Contains(m["link"].(string), "?h=me.example.com") {
+		t.Fatalf("invite json %v", m)
+	}
+	x.code(exitError, "invite", "--contact", "/ip4/192.168.1.2/tcp/4001")
+
+	// add takes an invite link.
+	bob := peer(t, 2)
+	link := "openaim:add/" + bob.Public().String()
+	r = x.ok("add", link, "--petname", "Bob", "--greeting", "hey")
+	if !strings.Contains(r.stdout, "Added Bob") || !strings.Contains(r.stdout, "pending-out") {
+		t.Fatalf("add by link: %q", r.stdout)
+	}
+	x.code(exitExists, "add", link)
+	x.code(exitError, "add", "openaim:add/notakey")
+
+	// A request arrives: buddies shows it; accept, decline, block, rename.
+	carol, dave := peer(t, 3), peer(t, 4)
+	for _, id := range []*identity.Identity{carol, dave} {
+		for _, f := range requestFrom(t, id, x.me.Public(), "Pal "+id.Public().KeyID(), "it's me") {
+			if _, err := x.d.Node().HandleFrame(context.Background(), f); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	r = x.ok("buddies")
+	if !strings.Contains(r.stdout, "2 buddy request(s) waiting") || !strings.Contains(r.stdout, `calls themselves "Pal `+carol.Public().KeyID()) ||
+		!strings.Contains(r.stdout, `"it's me"`) {
+		t.Fatalf("buddies:\n%s", r.stdout)
+	}
+	x.code(exitError, "accept", "Bob") // pending-out: they haven't asked
+	if r := x.ok("accept", carol.Public().KeyID()); !strings.Contains(r.stdout, "Accepted") || !strings.Contains(r.stdout, "accepted") {
+		t.Fatalf("accept: %q", r.stdout)
+	}
+	if r := x.ok("decline", dave.Public().String()); !strings.Contains(r.stdout, "Declined") {
+		t.Fatalf("decline: %q", r.stdout)
+	}
+	x.code(exitNotFound, "decline", dave.Public().String())
+	if r := x.ok("rename", carol.Public().KeyID(), "Carol", "--group", "Friends"); !strings.Contains(r.stdout, "Carol") || !strings.Contains(r.stdout, "Friends") {
+		t.Fatalf("rename: %q", r.stdout)
+	}
+	x.code(exitUsage, "rename", "Carol")
+	m = jsonObj(t, x.ok("--json", "block", "Carol").stdout)
+	if m["state"] != "BUDDY_STATE_BLOCKED" || m["petname"] != "Carol" {
+		t.Fatalf("block json %v", m)
+	}
+	x.code(exitNotFound, "block", "Nobody")
 }
