@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aghman/openaim/internal/frame"
+	"github.com/aghman/openaim/internal/identity"
 	"github.com/aghman/openaim/internal/store"
 )
 
@@ -24,11 +26,39 @@ const (
 	// EventBuddyRequest: a buddy request arrived (new or merged into an
 	// earlier one). Buddy and Details are set; Details.Request has it.
 	EventBuddyRequest
+	// EventBuddyPresence: what we show for a buddy changed. Buddy and
+	// BuddyPresence are set.
+	EventBuddyPresence
+	// EventMessageUpdated: an outgoing IM's delivery changed. Update is
+	// set.
+	EventMessageUpdated
 )
 
-// Event is one change inside the daemon. Exactly one of Buddy, Message and
-// Presence is set, according to Kind. Buddy events also carry the buddy's
-// handle check state in HandleCheck, when it has one.
+// DeliveryState is an outgoing message's delivery as clients see it; the
+// values are router.DeliveryState's.
+type DeliveryState int
+
+const (
+	DeliveryQueued DeliveryState = iota // sealed, not sent yet
+	DeliverySent                        // sent at least once; maybe partly acked
+	DeliveryAcked                       // every fragment acked
+	DeliveryFailed                      // given up on
+)
+
+// MessageUpdate is a change in an outgoing IM's delivery.
+type MessageUpdate struct {
+	MsgID     frame.MsgID
+	Buddy     identity.PublicKey
+	State     DeliveryState
+	AckedMask uint16 // bit i: fragment i acked
+	FragCount int
+	Attempts  int
+}
+
+// Event is one change inside the daemon. Exactly one of Buddy, Message,
+// Presence and Update is set, according to Kind (EventBuddyPresence also
+// sets BuddyPresence). Buddy events also carry the buddy's handle check
+// state in HandleCheck, when it has one.
 type Event struct {
 	Seq      uint64 // 1, 2, … within a daemon run
 	Time     time.Time
@@ -36,6 +66,9 @@ type Event struct {
 	Buddy    *store.Buddy
 	Message  *Message
 	Presence *Presence
+	Update   *MessageUpdate
+
+	BuddyPresence *BuddyPresence
 
 	HandleCheck *store.HandleCheck
 	// Details is set on buddy events when known.

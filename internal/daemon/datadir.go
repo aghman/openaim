@@ -17,6 +17,12 @@ const (
 	KeystoreFile = "identity.key" // spec/backup.md keystore (OAIMKEY1)
 	SocketFile   = "openaimd.sock"
 	LockFile     = "openaimd.pid"
+	// NetworkFile is the bootstrap and relay list (ip.NetworkConfig JSON);
+	// missing means the built-in defaults.
+	NetworkFile = "network.json"
+	// NetworkKeyFile is the fixed libp2p key of a --public node. Ordinary
+	// nodes never write one: their network key is fresh every generation.
+	NetworkKeyFile = "network.key"
 )
 
 // DefaultDataDir is where the daemon keeps its state unless told otherwise:
@@ -61,6 +67,8 @@ type Paths struct {
 	Keystore string
 	Socket   string
 	Lock     string
+	Network  string // NetworkFile
+	NetKey   string // NetworkKeyFile
 }
 
 // PathsFor lays out the files in dir.
@@ -71,6 +79,8 @@ func PathsFor(dir string) Paths {
 		Keystore: filepath.Join(dir, KeystoreFile),
 		Socket:   filepath.Join(dir, SocketFile),
 		Lock:     filepath.Join(dir, LockFile),
+		Network:  filepath.Join(dir, NetworkFile),
+		NetKey:   filepath.Join(dir, NetworkKeyFile),
 	}
 }
 

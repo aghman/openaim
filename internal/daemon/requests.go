@@ -87,12 +87,16 @@ func (n *Node) presenceKey(ctx context.Context) ([]byte, error) {
 	return k, nil
 }
 
-// contactHint is our contact hint for invites and REACH, or "".
+// contactHint is our contact hint for invites and REACH, or "": the
+// configured one, else the network's relay circuit.
 func (n *Node) contactHint() string {
-	if n.cfg.ContactHint == nil {
-		return ""
+	var h string
+	switch {
+	case n.cfg.ContactHint != nil:
+		h = n.cfg.ContactHint()
+	case n.net != nil:
+		h = n.net.contactHint()
 	}
-	h := n.cfg.ContactHint()
 	if h == "" {
 		return ""
 	}
@@ -439,9 +443,13 @@ func (n *Node) acceptLocked(ctx context.Context, b store.Buddy) (*pendingAccept,
 	return &pendingAccept{buddy: b, out: out, reach: n.peerReach(ctx, b.ID)}, nil
 }
 
-// sendAccept hands a queued BUDDY_ACCEPT to the sink. Call it without
-// writeMu held.
+// sendAccept hands a queued BUDDY_ACCEPT to the sink, or with a network to
+// the router, which retries it until acked. Call it without writeMu held.
 func (n *Node) sendAccept(ctx context.Context, a *pendingAccept) {
+	if n.net != nil {
+		n.net.accepted(a.buddy, a.reach)
+		return
+	}
 	err := n.deliver(ctx, DeliveryTarget{Kind: TargetBuddy, Key: a.buddy.Key, Layout: a.out.Layout, Reach: a.reach}, a.out.Frames)
 	switch {
 	case errors.Is(err, ErrNoSink):
@@ -543,6 +551,9 @@ func (n *Node) DeclineBuddy(ctx context.Context, sel string) (store.Buddy, error
 		return b, err
 	}
 	n.untrackBuddy(b.Key)
+	if n.net != nil {
+		n.net.forget(b)
+	}
 	n.log.Info("buddy request declined", "buddy", b.Key.KeyID())
 	n.events.publish(Event{Kind: EventBuddyRemoved, Buddy: &b, Details: det})
 	return b, nil
@@ -570,6 +581,12 @@ func (n *Node) BlockBuddy(ctx context.Context, sel string) (store.Buddy, error) 
 	}
 	b.State = store.Blocked
 	n.untrackBuddy(b.Key)
+	if n.net != nil {
+		n.net.forget(b)
+	}
+	if err := n.failQueued(ctx, b); err != nil {
+		return b, err
+	}
 	n.log.Info("buddy blocked", "buddy", b.Key.KeyID())
 	n.events.publish(Event{Kind: EventBuddyChanged, Buddy: &b, HandleCheck: n.handleCheckOrNil(ctx, b), Details: n.detailsOrNil(ctx, b)})
 	return b, nil

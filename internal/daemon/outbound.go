@@ -197,11 +197,15 @@ func (n *Node) FirstContactStats() FirstContactStats {
 const reachTTL = frame.MaxAge
 
 // ourReach is our current reachability for requests and accepts: the
-// transports' REACH if they give one, else one built from the contact hint,
-// else nil.
+// configured REACH (Config.Reach) or the network's, else one built from the
+// contact hint, else nil.
 func (n *Node) ourReach() *pb.Reach {
-	if n.cfg.Reach != nil {
-		if r := n.cfg.Reach(); r != nil {
+	reach := n.cfg.Reach
+	if reach == nil && n.net != nil {
+		reach = n.net.reachBody
+	}
+	if reach != nil {
+		if r := reach(); r != nil {
 			if err := body.Validate(r); err != nil {
 				n.log.Warn("ignoring invalid REACH from the transports", "err", err)
 				return nil

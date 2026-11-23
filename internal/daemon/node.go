@@ -3,9 +3,10 @@
 // presence. Frontends reach it through the local gRPC API (internal/api);
 // this package knows nothing about gRPC.
 //
-// At this stage there are no transports: sent messages are sealed and queued
-// in the store, and inbound frames enter through HandleFrame, which the
-// transports will call.
+// With Config.Network set, Open also brings up the IP transport and the
+// router, rendezvous and presence on it (network.go); without it the node
+// runs offline: sent messages are sealed and queued in the store, and
+// inbound frames enter through HandleFrame.
 package daemon
 
 import (
@@ -21,6 +22,7 @@ import (
 	"github.com/aghman/openaim/internal/handle"
 	"github.com/aghman/openaim/internal/identity"
 	"github.com/aghman/openaim/internal/keystore"
+	"github.com/aghman/openaim/internal/presence"
 	"github.com/aghman/openaim/internal/router"
 	"github.com/aghman/openaim/internal/store"
 	pb "github.com/aghman/openaim/internal/wirepb"
@@ -87,6 +89,10 @@ type Config struct {
 	// wait for an answer; requests from further new keys are dropped. Zero
 	// means DefaultMaxPendingRequests.
 	MaxPendingRequests int
+
+	// Network, if set, runs the IP transport (network.go). It is then the
+	// FrameSink, and gives Reach and ContactHint unless those are set.
+	Network *NetworkOptions
 }
 
 // Node is a running daemon's state. Its methods are safe for concurrent use.
@@ -108,6 +114,8 @@ type Node struct {
 
 	sinkMu sync.Mutex
 	sinkV  FrameSink
+
+	net *netState // nil when offline; set once in Open
 
 	mu          sync.Mutex // guards pairs, presence and recoveryKey
 	pairs       map[identity.PublicKey]*identity.Pair
@@ -225,16 +233,29 @@ func Open(ctx context.Context, cfg Config) (_ *Node, err error) {
 		}
 	}
 	n.log.Info("identity unlocked", "key_id", pub.KeyID(), "buddies", len(buddies), "data_dir", p.Dir)
+	if cfg.Network != nil {
+		if err := n.startNetwork(ctx, *cfg.Network); err != nil {
+			return nil, fmt.Errorf("daemon: network: %w", err)
+		}
+		if cfg.FrameSink == nil {
+			n.sinkV = n.net
+		}
+	}
 	if !cfg.DisableHandleLoop {
 		n.startHandleLoop()
 	}
 	return n, nil
 }
 
-// Close stops handle re-checks, ends event subscriptions, closes the
-// database and releases the data directory.
+// Close stops handle re-checks and the network (presence signs off first),
+// ends event subscriptions, closes the database and releases the data
+// directory.
 func (n *Node) Close() error {
 	n.stopHandleLoop()
+	if n.net != nil {
+		n.SetFrameSink(nil)
+		n.net.close()
+	}
 	if n.events != nil {
 		n.events.close()
 	}
@@ -380,9 +401,8 @@ func (n *Node) Presence() Presence {
 	return n.presence
 }
 
-// SetPresence changes our presence and away message and saves them.
-//
-// TODO(presence): broadcast PRESENCE to buddies once transports exist.
+// SetPresence changes our presence and away message and saves them. With a
+// network, buddies with a session up are told at once.
 func (n *Node) SetPresence(ctx context.Context, state PresenceState, away string) (Presence, error) {
 	if state < Online || state > Offline {
 		return Presence{}, fmt.Errorf("%w: presence state %d", ErrInvalid, state)
@@ -407,6 +427,11 @@ func (n *Node) SetPresence(ctx context.Context, state PresenceState, away string
 	}
 	if err := n.store.SetMeta(ctx, metaPresence, b); err != nil {
 		return p, err
+	}
+	if n.net != nil {
+		if err := n.net.pres.Set(presence.State(state), away); err != nil {
+			n.log.Warn("telling buddies our presence", "err", err)
+		}
 	}
 	n.events.publish(Event{Kind: EventPresenceChanged, Presence: &p})
 	return p, nil

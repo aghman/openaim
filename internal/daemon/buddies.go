@@ -128,6 +128,9 @@ func (n *Node) RemoveBuddy(ctx context.Context, sel string) (store.Buddy, error)
 		return b, err
 	}
 	n.untrackBuddy(b.Key)
+	if n.net != nil {
+		n.net.forget(b)
+	}
 	n.log.Info("buddy removed", "buddy", b.Key.KeyID())
 	n.events.publish(Event{Kind: EventBuddyRemoved, Buddy: &b, HandleCheck: check})
 	return b, nil
