@@ -16,6 +16,7 @@ import (
 	pb "github.com/aghman/openaim/internal/apipb"
 	"github.com/aghman/openaim/internal/daemon"
 	"github.com/aghman/openaim/internal/keystore"
+	"github.com/aghman/openaim/internal/transport/ip"
 )
 
 func init() { keystoreParams = keystore.Params{Time: 1, MemoryKiB: 8 << 10, Threads: 1} }
@@ -137,7 +138,8 @@ func TestInitRestoreRun(t *testing.T) {
 	// Run serves until the context ends.
 	runCtx, cancel := context.WithCancel(ctx)
 	done := make(chan result, 1)
-	go func() { done <- runCmd(runCtx, "", vars) }() // "run" is the default command
+	// "run" is the default command. On the network, but only on loopback.
+	go func() { done <- runCmd(runCtx, "", vars, "--listen", "/ip4/127.0.0.1/tcp/0") }()
 	sock := daemon.PathsFor(dir2).Socket
 	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(5 * time.Millisecond) {
 		if _, err := os.Lstat(sock); err == nil {
@@ -155,6 +157,10 @@ func TestInitRestoreRun(t *testing.T) {
 	st, err := pb.NewDaemonClient(conn).GetStatus(ctx, &pb.GetStatusRequest{})
 	if err != nil || st.GetIdentityKey() != key {
 		t.Fatalf("status %v %v", st, err)
+	}
+	if n := st.GetNetwork(); n.GetPeerId() == "" || len(n.GetListenAddrs()) == 0 ||
+		!strings.HasPrefix(n.GetListenAddrs()[0], "/ip4/127.0.0.1/tcp/") || n.GetPublic() {
+		t.Fatalf("network %v", n)
 	}
 	cancel()
 	if r := <-done; r.code != 0 {
@@ -223,7 +229,7 @@ func TestKeychainInitRun(t *testing.T) {
 	// Plain run uses the keychain, with no passphrase.
 	runCtx, cancel := context.WithCancel(ctx)
 	done := make(chan result, 1)
-	go func() { done <- runCmd(runCtx, "", nil, "run", "--data-dir", dir) }()
+	go func() { done <- runCmd(runCtx, "", nil, "run", "--data-dir", dir, "--offline") }()
 	sock := daemon.PathsFor(dir).Socket
 	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(5 * time.Millisecond) {
 		if _, err := os.Lstat(sock); err == nil {
@@ -239,7 +245,7 @@ func TestKeychainInitRun(t *testing.T) {
 	}
 	defer conn.Close()
 	st, err := pb.NewDaemonClient(conn).GetStatus(ctx, &pb.GetStatusRequest{})
-	if err != nil || st.GetIdentityKey() != key {
+	if err != nil || st.GetIdentityKey() != key || st.GetNetwork() != nil {
 		t.Fatalf("status %v %v", st, err)
 	}
 	cancel()
@@ -258,5 +264,59 @@ func TestKeychainInitRun(t *testing.T) {
 	}
 	if r := runCmd(ctx, "", nil, "run", "--data-dir", dir2, "--keystore", "keychain"); r.code != 1 || !strings.Contains(r.stderr, "keystore") {
 		t.Fatalf("mismatched run: %+v", r)
+	}
+}
+
+func TestNetworkInit(t *testing.T) {
+	dir := filepath.Join(shortDir(t), "n")
+	r := runCmd(context.Background(), "", nil, "network", "init", "--data-dir", dir)
+	path := daemon.PathsFor(dir).Network
+	if r.code != 0 || !strings.Contains(r.stdout, path) {
+		t.Fatalf("network init: %+v", r)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(b, ip.DefaultNetworkConfigJSON()) {
+		t.Fatalf("wrote %q %v", b, err)
+	}
+	if _, err := ip.LoadNetworkConfig(path); err != nil {
+		t.Fatal(err)
+	}
+	// It won't overwrite an edited file without --force.
+	if err := os.WriteFile(path, []byte(`{"relays": []}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if r := runCmd(context.Background(), "", nil, "network", "init", "--data-dir", dir); r.code != 1 || !strings.Contains(r.stderr, "--force") {
+		t.Fatalf("second init: %+v", r)
+	}
+	if r := runCmd(context.Background(), "", nil, "network", "init", "--data-dir", dir, "--force"); r.code != 0 {
+		t.Fatalf("--force: %+v", r)
+	}
+	if b, _ := os.ReadFile(path); !bytes.Equal(b, ip.DefaultNetworkConfigJSON()) {
+		t.Fatalf("--force left %q", b)
+	}
+	if r := runCmd(context.Background(), "", nil, "network"); r.code != 2 || !strings.Contains(r.stderr, "network init") {
+		t.Fatalf("bare network: %+v", r)
+	}
+}
+
+func TestRunNetworkFlags(t *testing.T) {
+	ctx := context.Background()
+	dir := filepath.Join(shortDir(t), "f")
+	vars := map[string]string{EnvPassphrase: "x"}
+	if r := runCmd(ctx, "", vars, "init", "--data-dir", dir, "--no-recovery-key"); r.code != 0 {
+		t.Fatalf("init: %+v", r)
+	}
+	if r := runCmd(ctx, "", vars, "run", "--data-dir", dir, "--offline", "--public"); r.code != 2 {
+		t.Fatalf("--offline --public: %+v", r)
+	}
+	if r := runCmd(ctx, "", vars, "run", "--data-dir", dir, "--listen", "not an addr"); r.code != 1 || !strings.Contains(r.stderr, "--listen") {
+		t.Fatalf("bad --listen: %+v", r)
+	}
+	// A broken network.json is reported before anything starts.
+	if err := os.WriteFile(daemon.PathsFor(dir).Network, []byte(`{"relay": []}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if r := runCmd(ctx, "", vars, "run", "--data-dir", dir, "--listen", "/ip4/127.0.0.1/tcp/0"); r.code != 1 || !strings.Contains(r.stderr, "network init --force") {
+		t.Fatalf("broken network.json: %+v", r)
 	}
 }

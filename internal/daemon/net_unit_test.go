@@ -1,12 +1,16 @@
 package daemon
 
 import (
+	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	lpeer "github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/client"
 	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/aghman/openaim/internal/body"
@@ -14,6 +18,7 @@ import (
 	"github.com/aghman/openaim/internal/frame"
 	"github.com/aghman/openaim/internal/router"
 	"github.com/aghman/openaim/internal/store"
+	"github.com/aghman/openaim/internal/transport/ip"
 	pb "github.com/aghman/openaim/internal/wirepb"
 )
 
@@ -214,5 +219,50 @@ func TestBlockFailsQueued(t *testing.T) {
 	h, err := n.History(ctx, "bob", 10)
 	if err != nil || len(h) != 1 || h[0].State != store.Failed {
 		t.Fatalf("history %+v %v", h, err)
+	}
+}
+
+// TestNetworkPublic: --public mode keeps one peer ID across restarts (in
+// network.key), never rotates, and serves relay reservations.
+func TestNetworkPublic(t *testing.T) {
+	dir := tempDir(t)
+	if _, err := Init(ctx, initCfg(dir)); err != nil {
+		t.Fatal(err)
+	}
+	opts := &NetworkOptions{Public: true, Listen: []string{"/ip4/127.0.0.1/tcp/0"}, Config: &ip.NetworkConfig{}}
+	openPublic := func() *Node {
+		n, err := Open(ctx, Config{DataDir: dir, Passphrase: testPass, KeystoreParams: fast, DisableHandleLoop: true, Network: opts})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	n := openPublic()
+	st := n.Network()
+	if !st.Public || st.PeerID == "" {
+		t.Fatalf("status %+v", st)
+	}
+	if err := n.Rotate(ctx); !errors.Is(err, ip.ErrFixedKey) {
+		t.Fatalf("rotate: %v", err)
+	}
+	// An ordinary node can reserve a slot on it.
+	h, err := ip.NewHost(ip.HostOptions{Listen: []string{"/ip4/127.0.0.1/tcp/0"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	rctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if _, err := client.Reserve(rctx, h, lpeer.AddrInfo{ID: st.PeerID, Addrs: n.net.node.Host().Addrs()}); err != nil {
+		t.Fatalf("reservation on the public node: %v", err)
+	}
+	n.Close()
+	if _, err := os.Stat(filepath.Join(dir, NetworkKeyFile)); err != nil {
+		t.Fatal(err)
+	}
+	n = openPublic()
+	defer n.Close()
+	if id := n.Network().PeerID; id != st.PeerID {
+		t.Fatalf("peer ID %s after a restart, was %s", id, st.PeerID)
 	}
 }

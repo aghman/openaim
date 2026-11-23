@@ -1,11 +1,12 @@
 // Command openaimd is the OpenAIM daemon (design §3). It owns the identity,
-// the buddy list, the message store and (later) the transports, and serves
-// the local client API that the CLI, TUI and GUI use.
+// the buddy list, the message store and the transports, and serves the
+// local client API that the CLI, TUI and GUI use.
 //
 //	openaimd init --backup FILE create an identity and its recovery key (kept only in FILE)
 //	openaimd init --restore     restore an identity from its phrase (no recovery key)
 //	openaimd init --restore-backup FILE   restore an identity and its recovery key
-//	openaimd [run]              unlock the identity and serve the API
+//	openaimd [run]              unlock the identity, join the network and serve the API
+//	openaimd network init       write network.json (bootstrap and relay nodes) to edit
 //	openaimd version
 package main
 
@@ -24,6 +25,7 @@ import (
 	"strings"
 	"syscall"
 
+	ma "github.com/multiformats/go-multiaddr"
 	"golang.org/x/term"
 
 	"github.com/aghman/openaim/internal/api"
@@ -32,6 +34,7 @@ import (
 	"github.com/aghman/openaim/internal/identity"
 	"github.com/aghman/openaim/internal/invite"
 	"github.com/aghman/openaim/internal/keystore"
+	"github.com/aghman/openaim/internal/transport/ip"
 )
 
 // EnvPassphrase supplies the keystore passphrase non-interactively.
@@ -44,7 +47,9 @@ Usage:
                                       the only copy of its recovery key
   openaimd init --restore [flags]     restore an identity from its recovery phrase
   openaimd init --restore-backup FILE restore an identity from a backup file
-  openaimd [run] [flags]              unlock the identity and serve the local API
+  openaimd [run] [flags]              unlock the identity, join the network and
+                                      serve the local API
+  openaimd network init [flags]       write the network config template (network.json)
   openaimd version                    print the version
 
 Common flags:
@@ -105,6 +110,8 @@ func run(ctx context.Context, args []string, e env) int {
 		err = runDaemon(ctx, args, e)
 	case "init":
 		err = runInit(ctx, args, e)
+	case "network":
+		err = runNetwork(args, e)
 	case "version":
 		fmt.Fprintln(e.stdout, "openaimd", daemon.BuildVersion())
 	case "help":
@@ -271,6 +278,15 @@ func runDaemon(ctx context.Context, args []string, e env) error {
 	registry := fs.String("registry", "", "default handle registry domain: handles one label under it show as just that label (default: none)")
 	displayName := fs.String("display-name", "", "the name your buddy requests and accepts offer (at most 64 bytes)")
 	contactHint := fs.String("contact-hint", "", "contact hint for invite links: a relay-circuit or mailbox multiaddr, never your own IP address")
+	offline := fs.Bool("offline", false, "don't join the network: messages stay queued (for maintenance)")
+	public := fs.Bool("public", false, "run a public relay and DHT bootstrap node: a fixed peer ID (network.key in the data dir), "+
+		"DHT server mode and a circuit relay service; for operators of publicly reachable machines")
+	natPortMap := fs.Bool("upnp", false, "try to open a port on the home router with UPnP / NAT-PMP")
+	var listen []string
+	fs.Func("listen", "multiaddr to listen on; repeat for each (default: TCP and QUIC on random ports, all interfaces)", func(s string) error {
+		listen = append(listen, s)
+		return nil
+	})
 	fcRate := fs.Float64("first-contact-rate", daemon.DefaultFirstContactRate, "incoming first-contact frames allowed per second, per transport")
 	fcBurst := fs.Int("first-contact-burst", daemon.DefaultFirstContactBurst, "incoming first-contact frames allowed in a burst, per transport")
 	var resolvers []string
@@ -306,6 +322,23 @@ func runDaemon(ctx context.Context, args []string, e env) error {
 	if *fcRate <= 0 || *fcBurst <= 0 {
 		return errors.New("--first-contact-rate and --first-contact-burst must be positive")
 	}
+	var network *daemon.NetworkOptions
+	switch {
+	case *offline && (*public || len(listen) > 0 || *natPortMap):
+		fmt.Fprintln(e.stderr, "openaimd run: --offline takes no network flags")
+		return errUsage
+	case !*offline:
+		for _, l := range listen {
+			if _, err := ma.NewMultiaddr(l); err != nil {
+				return fmt.Errorf("--listen %q: %w", l, err)
+			}
+		}
+		// Read network.json now, so a broken file is a clear error.
+		if _, err := ip.LoadNetworkConfig(daemon.PathsFor(dir).Network); err != nil {
+			return fmt.Errorf("network config: %w (fix it, or rewrite it with openaimd network init --force)", err)
+		}
+		network = &daemon.NetworkOptions{Listen: listen, Public: *public, NATPortMap: *natPortMap}
+	}
 	err = api.Run(ctx, api.Config{
 		Config: daemon.Config{
 			DataDir: dir, Keystore: mode, KeystoreParams: keystoreParams, Logger: log,
@@ -313,6 +346,7 @@ func runDaemon(ctx context.Context, args []string, e env) error {
 			PassphraseFunc: func() ([]byte, error) { return c.passphrase(e, false) },
 			HandleRegistry: *registry, DoHResolvers: resolvers,
 			DisplayName: *displayName, ContactHint: hint, FirstContactRate: *fcRate, FirstContactBurst: *fcBurst,
+			Network: network,
 		},
 		SocketPath: *socket,
 	})
@@ -524,4 +558,63 @@ func printPhrase(w io.Writer, phrase string) {
 		fmt.Fprintln(bw)
 	}
 	fmt.Fprintln(bw)
+}
+
+const networkHelp = `Usage: openaimd network init [--force] [--data-dir DIR]
+
+Writes network.json, the list of DHT bootstrap nodes and circuit relays the
+daemon starts from, into the data directory, as a template to edit. Without
+the file the daemon uses the same built-in list. NO COMMUNITY NODES ARE
+OPERATED YET, so the lists are empty: add nodes you run (openaimd run
+--public on a publicly reachable machine) or trust. Each entry is a
+multiaddr ending in /p2p/<peer ID>; a list in the file replaces the
+built-in one, and a list left out keeps it. Restart the daemon to apply.
+
+Flags:
+`
+
+// runNetwork is "openaimd network init".
+func runNetwork(args []string, e env) error {
+	if len(args) == 0 || args[0] != "init" {
+		fmt.Fprint(e.stderr, networkHelp)
+		return errUsage
+	}
+	fs := flag.NewFlagSet("network init", flag.ContinueOnError)
+	fs.Usage = func() {
+		fmt.Fprint(fs.Output(), networkHelp)
+		fs.PrintDefaults()
+	}
+	dataDir := fs.String("data-dir", "", "data directory (default: $OPENAIM_DATA_DIR, else per-OS)")
+	force := fs.Bool("force", false, "replace an existing network.json")
+	if err := parse(fs, args[1:], e); err != nil {
+		return err
+	}
+	c := common{dataDir: *dataDir}
+	dir, err := c.resolveDataDir(e)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	path := daemon.PathsFor(dir).Network
+	flags := os.O_WRONLY | os.O_CREATE | os.O_EXCL
+	if *force {
+		flags = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	}
+	f, err := os.OpenFile(path, flags, 0o600)
+	if errors.Is(err, os.ErrExist) {
+		return fmt.Errorf("%s exists; edit it, or give --force to replace it with the template", path)
+	} else if err != nil {
+		return err
+	}
+	if _, err := f.Write(ip.DefaultNetworkConfigJSON()); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	fmt.Fprintf(e.stdout, "Wrote %s\n", path)
+	return nil
 }
