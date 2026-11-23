@@ -44,7 +44,7 @@ func (s *server) rpcError(method string, err error) error {
 	case errors.Is(err, daemon.ErrDuplicate):
 		return status.Error(codes.AlreadyExists, err.Error())
 	case errors.Is(err, daemon.ErrBlocked), errors.Is(err, daemon.ErrNoHandle), errors.Is(err, daemon.ErrHandleUnverified),
-		errors.Is(err, daemon.ErrBackupMismatch), errors.Is(err, daemon.ErrNotPending):
+		errors.Is(err, daemon.ErrBackupMismatch), errors.Is(err, daemon.ErrNotPending), errors.Is(err, daemon.ErrOffline):
 		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, daemon.ErrHandleUnreachable):
 		return status.Error(codes.Unavailable, err.Error())
@@ -81,6 +81,7 @@ func (s *server) GetStatus(ctx context.Context, _ *pb.GetStatusRequest) (*pb.Sta
 		Presence:       presencePB(st.Presence),
 		QueuedMessages: uint32(st.QueuedMessages),
 		DataDir:        s.n.Paths().Dir,
+		Network:        networkPB(s.n.Network()),
 	}, nil
 }
 
@@ -244,6 +245,20 @@ func (s *server) SetPresence(ctx context.Context, req *pb.SetPresenceRequest) (*
 		return nil, s.rpcError("SetPresence", err)
 	}
 	return presencePB(p), nil
+}
+
+func (s *server) Activity(_ context.Context, req *pb.ActivityRequest) (*pb.ActivityResponse, error) {
+	at := s.n.Now()
+	if req.GetAt() != nil {
+		if err := req.GetAt().CheckValid(); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "at: %v", err)
+		}
+		at = req.GetAt().AsTime()
+	}
+	if err := s.n.Activity(at); err != nil {
+		return nil, s.rpcError("Activity", err)
+	}
+	return &pb.ActivityResponse{}, nil
 }
 
 func (s *server) SubscribeEvents(_ *pb.SubscribeEventsRequest, stream grpc.ServerStreamingServer[pb.Event]) error {

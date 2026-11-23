@@ -57,6 +57,7 @@ const (
 	Daemon_SendIM_FullMethodName           = "/openaim.api.v1.Daemon/SendIM"
 	Daemon_History_FullMethodName          = "/openaim.api.v1.Daemon/History"
 	Daemon_SetPresence_FullMethodName      = "/openaim.api.v1.Daemon/SetPresence"
+	Daemon_Activity_FullMethodName         = "/openaim.api.v1.Daemon/Activity"
 	Daemon_SubscribeEvents_FullMethodName  = "/openaim.api.v1.Daemon/SubscribeEvents"
 	Daemon_ExportBackup_FullMethodName     = "/openaim.api.v1.Daemon/ExportBackup"
 	Daemon_Shutdown_FullMethodName         = "/openaim.api.v1.Daemon/Shutdown"
@@ -112,8 +113,13 @@ type DaemonClient interface {
 	// A buddy's recent IMs, both directions, oldest first.
 	History(ctx context.Context, in *HistoryRequest, opts ...grpc.CallOption) (*HistoryResponse, error)
 	// Sets our presence and away message (`openaim away`). It persists across
-	// daemon restarts.
+	// daemon restarts, and buddies with a session up are told at once.
 	SetPresence(ctx context.Context, in *SetPresenceRequest, opts ...grpc.CallOption) (*Presence, error)
+	// Reports the user's last activity (keystrokes, mouse, a sent IM) from a
+	// frontend, for idle detection (design §11.1): after 10 minutes without
+	// any, buddies see us as idle. Idle detection starts with the first
+	// report, so a daemon without a frontend never looks idle.
+	Activity(ctx context.Context, in *ActivityRequest, opts ...grpc.CallOption) (*ActivityResponse, error)
 	// A live stream of changes. The first event is always `ready`, sent once
 	// the subscription is in place: a client that loads state after seeing it
 	// misses nothing. A client that falls too far behind is cut off with
@@ -286,6 +292,16 @@ func (c *daemonClient) SetPresence(ctx context.Context, in *SetPresenceRequest, 
 	return out, nil
 }
 
+func (c *daemonClient) Activity(ctx context.Context, in *ActivityRequest, opts ...grpc.CallOption) (*ActivityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ActivityResponse)
+	err := c.cc.Invoke(ctx, Daemon_Activity_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daemonClient) SubscribeEvents(ctx context.Context, in *SubscribeEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Event], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &Daemon_ServiceDesc.Streams[0], Daemon_SubscribeEvents_FullMethodName, cOpts...)
@@ -375,8 +391,13 @@ type DaemonServer interface {
 	// A buddy's recent IMs, both directions, oldest first.
 	History(context.Context, *HistoryRequest) (*HistoryResponse, error)
 	// Sets our presence and away message (`openaim away`). It persists across
-	// daemon restarts.
+	// daemon restarts, and buddies with a session up are told at once.
 	SetPresence(context.Context, *SetPresenceRequest) (*Presence, error)
+	// Reports the user's last activity (keystrokes, mouse, a sent IM) from a
+	// frontend, for idle detection (design §11.1): after 10 minutes without
+	// any, buddies see us as idle. Idle detection starts with the first
+	// report, so a daemon without a frontend never looks idle.
+	Activity(context.Context, *ActivityRequest) (*ActivityResponse, error)
 	// A live stream of changes. The first event is always `ready`, sent once
 	// the subscription is in place: a client that loads state after seeing it
 	// misses nothing. A client that falls too far behind is cut off with
@@ -443,6 +464,9 @@ func (UnimplementedDaemonServer) History(context.Context, *HistoryRequest) (*His
 }
 func (UnimplementedDaemonServer) SetPresence(context.Context, *SetPresenceRequest) (*Presence, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetPresence not implemented")
+}
+func (UnimplementedDaemonServer) Activity(context.Context, *ActivityRequest) (*ActivityResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Activity not implemented")
 }
 func (UnimplementedDaemonServer) SubscribeEvents(*SubscribeEventsRequest, grpc.ServerStreamingServer[Event]) error {
 	return status.Error(codes.Unimplemented, "method SubscribeEvents not implemented")
@@ -744,6 +768,24 @@ func _Daemon_SetPresence_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Daemon_Activity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ActivityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).Activity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Daemon_Activity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).Activity(ctx, req.(*ActivityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Daemon_SubscribeEvents_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(SubscribeEventsRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -857,6 +899,10 @@ var Daemon_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetPresence",
 			Handler:    _Daemon_SetPresence_Handler,
+		},
+		{
+			MethodName: "Activity",
+			Handler:    _Daemon_Activity_Handler,
 		},
 		{
 			MethodName: "ExportBackup",

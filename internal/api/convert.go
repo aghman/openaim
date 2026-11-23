@@ -52,8 +52,7 @@ func (s *server) buddyPB(b store.Buddy, hc *store.HandleCheck, det *daemon.Buddy
 		State:       buddyStates[b.State],
 		Verified:    b.Verified,
 		AddedAt:     ts(b.AddedAt),
-		// TODO(presence): the buddy's last-heard presence, once received.
-		Presence:    &pb.Presence{State: pb.PresenceState_PRESENCE_STATE_OFFLINE},
+		Presence:    buddyPresencePB(s.n.BuddyPresence(b.Key)),
 		DisplayName: s.n.DisplayName(b),
 		ShortHandle: s.n.ShortHandle(b.Handle),
 	}
@@ -108,6 +107,13 @@ var deliveryStates = map[store.OutState]pb.DeliveryState{
 	store.Failed: pb.DeliveryState_DELIVERY_STATE_FAILED,
 }
 
+var deliveryPB = map[daemon.DeliveryState]pb.DeliveryState{
+	daemon.DeliveryQueued: pb.DeliveryState_DELIVERY_STATE_QUEUED,
+	daemon.DeliverySent:   pb.DeliveryState_DELIVERY_STATE_SENT,
+	daemon.DeliveryAcked:  pb.DeliveryState_DELIVERY_STATE_ACKED,
+	daemon.DeliveryFailed: pb.DeliveryState_DELIVERY_STATE_FAILED,
+}
+
 func messagePB(m daemon.Message) *pb.Message {
 	out := &pb.Message{
 		MsgId:      m.MsgID.String(),
@@ -123,6 +129,42 @@ func messagePB(m daemon.Message) *pb.Message {
 	case daemon.Outgoing:
 		out.Direction = pb.Direction_DIRECTION_OUTGOING
 		out.Delivery = deliveryStates[m.State]
+		if m.State == store.Queued && m.Attempts > 0 {
+			out.Delivery = pb.DeliveryState_DELIVERY_STATE_SENT
+		}
+		out.FragCount, out.AckedMask = uint32(m.FragCount), uint32(m.AckedMask)
+	}
+	return out
+}
+
+func messageUpdatePB(u daemon.MessageUpdate) *pb.MessageUpdate {
+	return &pb.MessageUpdate{MsgId: u.MsgID.String(), BuddyKey: u.Buddy.String(), Delivery: deliveryPB[u.State],
+		AckedMask: uint32(u.AckedMask), FragCount: uint32(u.FragCount), Attempts: uint32(u.Attempts)}
+}
+
+func buddyPresencePB(p daemon.BuddyPresence) *pb.Presence {
+	return &pb.Presence{State: presenceToPB[p.State], AwayMessage: p.AwayMessage, Since: ts(p.Since),
+		IdleMinutes: p.IdleMinutes, Connected: p.Connected}
+}
+
+func networkPB(st *daemon.NetworkStatus) *pb.NetworkStatus {
+	if st == nil {
+		return nil
+	}
+	out := &pb.NetworkStatus{
+		PeerId: st.PeerID.String(), Generation: st.Generation, BootstrapPeers: uint32(st.Bootstrap),
+		DhtRoutingTable: uint32(st.DHTPeers), SessionsUp: uint32(st.SessionsUp), Public: st.Public,
+		ContactHint: st.ContactHint, BuddiesOnline: uint32(st.Online),
+	}
+	for _, a := range st.Listen {
+		out.ListenAddrs = append(out.ListenAddrs, a.String())
+	}
+	for _, a := range st.Circuits {
+		out.RelayAddrs = append(out.RelayAddrs, a.String())
+	}
+	for _, r := range st.Relays {
+		out.Relays = append(out.Relays, &pb.RelayStatus{PeerId: r.ID.String(), Reserved: r.Reserved,
+			LastAttempt: ts(r.LastAttempt), Expires: ts(r.Expires), LastError: r.LastError})
 	}
 	return out
 }
@@ -162,6 +204,16 @@ func (s *server) eventPB(e daemon.Event) *pb.Event {
 		out.Kind = &pb.Event_MessageReceived{MessageReceived: messagePB(*e.Message)}
 	case daemon.EventPresenceChanged:
 		out.Kind = &pb.Event_PresenceChanged{PresenceChanged: presencePB(*e.Presence)}
+	case daemon.EventMessageUpdated:
+		out.Kind = &pb.Event_MessageUpdated{MessageUpdated: messageUpdatePB(*e.Update)}
+	case daemon.EventBuddyPresence:
+		p := *e.BuddyPresence
+		b := s.buddyPB(*e.Buddy, e.HandleCheck, e.Details)
+		b.Presence = buddyPresencePB(p) // as of the event, not as of now
+		out.Kind = &pb.Event_BuddyPresence{BuddyPresence: &pb.BuddyPresence{
+			Buddy: b, From: presenceToPB[p.From], To: presenceToPB[p.State], Reason: p.Reason,
+			DoorOpen: p.DoorOpen(), DoorClose: p.DoorClose(),
+		}}
 	default:
 		return nil
 	}

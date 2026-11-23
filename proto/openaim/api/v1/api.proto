@@ -91,8 +91,14 @@ service Daemon {
   rpc History(HistoryRequest) returns (HistoryResponse);
 
   // Sets our presence and away message (`openaim away`). It persists across
-  // daemon restarts.
+  // daemon restarts, and buddies with a session up are told at once.
   rpc SetPresence(SetPresenceRequest) returns (Presence);
+
+  // Reports the user's last activity (keystrokes, mouse, a sent IM) from a
+  // frontend, for idle detection (design §11.1): after 10 minutes without
+  // any, buddies see us as idle. Idle detection starts with the first
+  // report, so a daemon without a frontend never looks idle.
+  rpc Activity(ActivityRequest) returns (ActivityResponse);
 
   // A live stream of changes. The first event is always `ready`, sent once
   // the subscription is in place: a client that loads state after seeing it
@@ -136,6 +142,39 @@ message Status {
   // carry so buddies can pin it (spec/wire.md §4.6). Empty if this identity
   // has none: it was restored from its phrase, or made without a backup.
   string recovery_key = 10;
+  // The IP transport (design §6.1). Unset when the daemon runs offline.
+  NetworkStatus network = 11;
+}
+
+// The IP transport's state, for `openaim status --verbose`.
+message NetworkStatus {
+  // Our current libp2p peer ID and its generation (1, 2, …): it changes at
+  // every restart and daily rotation (docs/ip-rotation-and-dht.md).
+  string peer_id = 1;
+  uint64 generation = 2;
+  // The current host's own addresses (multiaddrs, without /p2p/).
+  repeated string listen_addrs = 3;
+  // Our relay circuit addresses, one per relay holding a reservation
+  // (ending in /p2p/<peer_id>).
+  repeated string relay_addrs = 4;
+  // The configured relays (network.json) and our reservations on them.
+  repeated RelayStatus relays = 5;
+  uint32 bootstrap_peers = 6;   // configured bootstrap nodes
+  uint32 dht_routing_table = 7; // peers in the current DHT routing table
+  uint32 sessions_up = 8;       // /openaim/msg/1 sessions with a stream open
+  // `openaimd run --public`: a relay and DHT server with a fixed peer ID.
+  bool public = 9;
+  // What invite links get as their contact hint now, or empty.
+  string contact_hint = 10;
+  uint32 buddies_online = 11; // buddies shown online or away
+}
+
+message RelayStatus {
+  string peer_id = 1;
+  bool reserved = 2; // the last reservation attempt succeeded
+  google.protobuf.Timestamp last_attempt = 3;
+  google.protobuf.Timestamp expires = 4; // of the reservation, when reserved
+  string last_error = 5;
 }
 
 message BuddyCounts {
@@ -163,8 +202,9 @@ message Buddy {
   BuddyState state = 6;
   bool verified = 7; // the user checked the safety number
   google.protobuf.Timestamp added_at = 8;
-  // The buddy's presence as last heard. Always OFFLINE until transports
-  // exist.
+  // The buddy's presence as last heard from their authenticated PRESENCE:
+  // OFFLINE until they tell us otherwise, and always for buddies not
+  // accepted.
   Presence presence = 9;
 
   // What to call the buddy in a list: the petname, else the short handle,
@@ -363,9 +403,10 @@ enum Direction {
 
 enum DeliveryState {
   DELIVERY_STATE_UNSPECIFIED = 0; // incoming messages
-  DELIVERY_STATE_QUEUED = 1;      // sealed, not yet fully acked
-  DELIVERY_STATE_ACKED = 2;
-  DELIVERY_STATE_FAILED = 3;
+  DELIVERY_STATE_QUEUED = 1;      // sealed, not sent yet
+  DELIVERY_STATE_ACKED = 2;       // every fragment acked
+  DELIVERY_STATE_FAILED = 3;      // given up on
+  DELIVERY_STATE_SENT = 4;        // sent at least once, not fully acked yet
 }
 
 message Message {
@@ -380,6 +421,21 @@ message Message {
   // Outgoing only.
   DeliveryState delivery = 7;
   uint64 seq = 8; // per-direction counter
+  // Outgoing only: how many fragments the message has, and which of them
+  // (bit i = fragment i) the buddy acked.
+  uint32 frag_count = 9;
+  uint32 acked_mask = 10;
+}
+
+// A change in an outgoing message's delivery: its first send, an ACK
+// (possibly for only some fragments), or giving up.
+message MessageUpdate {
+  string msg_id = 1;
+  string buddy_key = 2;
+  DeliveryState delivery = 3;
+  uint32 acked_mask = 4;
+  uint32 frag_count = 5;
+  uint32 attempts = 6; // sends so far
 }
 
 message HistoryRequest {
@@ -402,14 +458,28 @@ message Presence {
   PresenceState state = 1;
   // Shown to buddies while away. ≤ 1024 bytes, no control characters but
   // newline and tab. %n, %d and %t are substituted when sent (design §11.1).
+  // For a buddy: their away message once fetched (it is fetched on demand,
+  // so it may be empty for a moment after they go away).
   string away_message = 2;
   google.protobuf.Timestamp since = 3; // when the state last changed
+  // Buddies only: minutes since their last activity while idle, else 0.
+  uint32 idle_minutes = 4;
+  // Buddies only: a session with them is up right now.
+  bool connected = 5;
 }
 
 message SetPresenceRequest {
   PresenceState state = 1; // UNSPECIFIED is rejected
   string away_message = 2;
 }
+
+message ActivityRequest {
+  // When the user was last active; unset means now. Times in the future
+  // count as now.
+  google.protobuf.Timestamp at = 1;
+}
+
+message ActivityResponse {}
 
 message SubscribeEventsRequest {}
 
@@ -432,7 +502,24 @@ message Event {
     // A buddy request arrived: a new PENDING_IN buddy (buddy_added comes
     // first) or a repeat merged into an earlier one. `request` holds it.
     Buddy buddy_request = 18;
+    // What we show for a buddy changed: their state, idleness or away
+    // message. door_open / door_close tell the UI when to play the sounds.
+    BuddyPresence buddy_presence = 19;
+    // An outgoing message's delivery changed (sent, acked, failed).
+    MessageUpdate message_updated = 20;
   }
+}
+
+message BuddyPresence {
+  Buddy buddy = 1; // with its new presence
+  PresenceState from = 2;
+  PresenceState to = 3;
+  // Why: "presence" (their PRESENCE), "signed-off", "door-close" (no
+  // session came back within the grace period), "heartbeat-timeout",
+  // "removed", or "away-message" (their away message arrived).
+  string reason = 4;
+  bool door_open = 5;  // they just came online
+  bool door_close = 6; // they just went offline
 }
 
 // Ready is the first event of every subscription.
