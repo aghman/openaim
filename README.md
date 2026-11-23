@@ -23,10 +23,14 @@ Windows `%AppData%\openaim`; override with `--data-dir` or `$OPENAIM_DATA_DIR`).
 ```bash
 bin/openaimd init              # create an identity; prints the 24-word recovery phrase once
 bin/openaimd init --restore    # or restore one (phrase read from the terminal or stdin)
-bin/openaimd                   # unlock and serve (same as: openaimd run)
+bin/openaimd                   # unlock, join the network and serve (same as: openaimd run)
+bin/openaimd network init      # write network.json (bootstrap and relay nodes) to edit
+bin/openaimd run --public      # a relay + DHT bootstrap node with a fixed peer ID, for public machines
 ```
 
 The keystore passphrase comes from `--passphrase-file`, `$OPENAIM_PASSPHRASE`, or a terminal prompt.
+No community bootstrap or relay nodes are operated yet: list one you run (`--public`) in both daemons'
+`network.json`. How the daemon wires the network is in [docs/network.md](docs/network.md).
 Regenerate the API stubs with `scripts/gen-apipb.sh` (needs `protoc-gen-go` and `protoc-gen-go-grpc`).
 
 ## The CLI
@@ -61,7 +65,7 @@ bin/openaim tui --embedded    # no daemon running? run one inside the TUI while 
 ```
 
 The buddy list (left) shows your groups with who is on, then an Offline group; groups collapse with
-Space or ←/→. The IM window (right) shows the history with `[queued]`/`[delivered]`/`[failed]` marks and
+Space or ←/→. The IM window (right) shows the history with `[queued]`/`[sent]`/`[delivered]`/`[failed]` marks and
 a byte counter for the mesh route ("159 bytes left (1/4)": 159 B in the first fragment, 166 B in each
 later one, up to 4 = 657 B). Contacts whose safety number you haven't checked are italic, with a ⚠ badge
 and their key ID. Keys: Tab switch, Enter open/send, Ctrl+N new IM, Ctrl+A away/back, Ctrl+B add
