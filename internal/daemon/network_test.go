@@ -342,3 +342,24 @@ func TestNetworkRestart(t *testing.T) {
 		t.Fatalf("after the restart: %+v %v", h, err)
 	}
 }
+
+// TestNetworkDoorClose: a buddy whose network vanishes without signing off
+// (a crash, a pulled cable) is shown offline once the grace period passes
+// without a session coming back.
+func TestNetworkDoorClose(t *testing.T) {
+	r := nettest.StartRelay(t, nil)
+	a, b := newNetDaemon(t, "alice", r), newNetDaemon(t, "bob", r)
+	befriend(t, a, b)
+	ia := a.mark()
+	start := time.Now()
+	b.net.sess.Close() // no OFFLINE presence goes out
+	b.net.node.Close()
+	i := a.waitEvent(ia, "bob offline", presenceOf(b.Identity(), Offline))
+	e := a.eventsSince(i - 1)[0]
+	if !e.BuddyPresence.DoorClose() || e.BuddyPresence.Reason != "door-close" {
+		t.Fatalf("bob went offline with %+v", e.BuddyPresence)
+	}
+	if d := time.Since(start); d < a.opts.PresenceGrace {
+		t.Fatalf("offline after %v, before the %v grace", d, a.opts.PresenceGrace)
+	}
+}
