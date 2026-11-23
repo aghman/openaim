@@ -72,7 +72,8 @@ var cmdStatus = &command{
 	name: "status", synopsis: "[--verbose]", summary: "show our identity, presence and counts",
 	help: `Prints the identity key and key ID, presence, buddy count and queued
 messages. --verbose adds everything else the daemon reports: version, data
-dir, start time, uptime and the buddy counts by state.
+dir, start time, uptime, the buddy counts by state, and the network: our
+current peer ID, relay reservations, listen addresses, DHT and sessions.
 `,
 	setup: func(fs *flag.FlagSet) runFunc {
 		verbose := fs.Bool("verbose", false, "show everything the daemon reports")
@@ -109,6 +110,7 @@ dir, start time, uptime and the buddy counts by state.
 				t.row(label("Data dir"), cell{text: clean(st.GetDataDir())})
 				t.row(label("Started"), cell{text: fmtTime(st.GetStartedAt())})
 				t.row(label("Uptime"), cell{text: fmtDuration(st.GetUptime())})
+				networkRows(t, label, st.GetNetwork())
 			}
 			t.write(cl.e.stdout, s)
 			return nil
@@ -559,4 +561,43 @@ var cmdVersion = &command{
 			return nil
 		}
 	},
+}
+
+// networkRows adds the network to `status --verbose`.
+func networkRows(t *table, label func(string) cell, n *pb.NetworkStatus) {
+	if n == nil {
+		t.row(label("Network"), cell{text: "offline (openaimd run --offline)", color: dim})
+		return
+	}
+	mode := ""
+	if n.GetPublic() {
+		mode = ", public relay and bootstrap node"
+	}
+	t.row(label("Network"), cell{text: fmt.Sprintf("peer %s (generation %d%s)", clean(n.GetPeerId()), n.GetGeneration(), mode)})
+	t.row(label("Online"), cell{text: fmt.Sprintf("%d buddies, %d session(s) up", n.GetBuddiesOnline(), n.GetSessionsUp())})
+	t.row(label("DHT"), cell{text: fmt.Sprintf("%d peer(s) in the routing table, %d bootstrap node(s) configured",
+		n.GetDhtRoutingTable(), n.GetBootstrapPeers())})
+	if len(n.GetRelays()) == 0 {
+		t.row(label("Relays"), cell{text: "none configured (see openaimd network init)", color: dim})
+	}
+	for _, r := range n.GetRelays() {
+		var state string
+		switch {
+		case r.GetReserved():
+			state = "reserved until " + fmtTime(r.GetExpires())
+		case r.GetLastError() != "":
+			state = "failed: " + clean(r.GetLastError())
+		default:
+			state = "not yet tried"
+		}
+		t.row(label("Relay"), cell{text: clean(r.GetPeerId()) + "  " + state})
+	}
+	hint := clean(n.GetContactHint())
+	if hint == "" {
+		hint = "none (no relay reservation)"
+	}
+	t.row(label("Contact"), cell{text: hint})
+	for _, a := range n.GetListenAddrs() {
+		t.row(label("Listen"), cell{text: clean(a)})
+	}
 }

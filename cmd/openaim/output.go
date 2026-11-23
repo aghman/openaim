@@ -211,6 +211,8 @@ func deliveryName(s pb.DeliveryState) string {
 	switch s {
 	case pb.DeliveryState_DELIVERY_STATE_QUEUED:
 		return "queued"
+	case pb.DeliveryState_DELIVERY_STATE_SENT:
+		return "sent"
 	case pb.DeliveryState_DELIVERY_STATE_ACKED:
 		return "delivered"
 	case pb.DeliveryState_DELIVERY_STATE_FAILED:

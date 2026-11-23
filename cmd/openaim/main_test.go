@@ -14,7 +14,10 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"github.com/aghman/openaim/internal/api"
+	pb "github.com/aghman/openaim/internal/apipb"
 	"github.com/aghman/openaim/internal/body"
 	"github.com/aghman/openaim/internal/daemon"
 	"github.com/aghman/openaim/internal/frame"
@@ -895,4 +898,29 @@ func TestRequestCommands(t *testing.T) {
 		t.Fatalf("block json %v", m)
 	}
 	x.code(exitNotFound, "block", "Nobody")
+}
+
+func TestFormatNetworkEvents(t *testing.T) {
+	names := map[string]string{"kbob": "Bob"}
+	bob := &pb.Buddy{IdentityKey: "kbob", Petname: "Bob", KeyId: "~kbob",
+		Presence: &pb.Presence{State: pb.PresenceState_PRESENCE_STATE_AWAY, AwayMessage: "lunch"}}
+	at := timestamppb.Now()
+	for _, c := range []struct {
+		ev   *pb.Event
+		want string
+	}{
+		{&pb.Event{Time: at, Kind: &pb.Event_BuddyPresence{BuddyPresence: &pb.BuddyPresence{Buddy: bob,
+			From: pb.PresenceState_PRESENCE_STATE_ONLINE, To: pb.PresenceState_PRESENCE_STATE_AWAY}}}, `Bob is away: "lunch"`},
+		{&pb.Event{Time: at, Kind: &pb.Event_BuddyPresence{BuddyPresence: &pb.BuddyPresence{
+			Buddy: &pb.Buddy{IdentityKey: "kbob", Petname: "Bob", Presence: &pb.Presence{State: pb.PresenceState_PRESENCE_STATE_OFFLINE}},
+			To:    pb.PresenceState_PRESENCE_STATE_OFFLINE, DoorClose: true, Reason: "door-close"}}}, "Bob is offline (door-close)"},
+		{&pb.Event{Time: at, Kind: &pb.Event_MessageUpdated{MessageUpdated: &pb.MessageUpdate{MsgId: "00ff", BuddyKey: "kbob",
+			Delivery: pb.DeliveryState_DELIVERY_STATE_ACKED}}}, "IM to Bob delivered (00ff)"},
+		{&pb.Event{Time: at, Kind: &pb.Event_MessageUpdated{MessageUpdated: &pb.MessageUpdate{MsgId: "00fe", BuddyKey: "kbob",
+			Delivery: pb.DeliveryState_DELIVERY_STATE_SENT}}}, "IM to Bob sent (00fe)"},
+	} {
+		if got := formatEvent(style{}, c.ev, names); !strings.HasSuffix(got, c.want) {
+			t.Errorf("got %q, want …%q", got, c.want)
+		}
+	}
 }

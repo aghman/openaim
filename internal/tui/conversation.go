@@ -64,6 +64,8 @@ func deliveryMark(d pb.DeliveryState) string {
 	switch d {
 	case pb.DeliveryState_DELIVERY_STATE_QUEUED:
 		return "[queued]"
+	case pb.DeliveryState_DELIVERY_STATE_SENT:
+		return "[sent]"
 	case pb.DeliveryState_DELIVERY_STATE_ACKED:
 		return "[delivered]"
 	case pb.DeliveryState_DELIVERY_STATE_FAILED:

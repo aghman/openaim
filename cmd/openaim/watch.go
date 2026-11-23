@@ -139,6 +139,20 @@ func formatEvent(s style, ev *pb.Event, names map[string]string) string {
 		return at + s.paint(bold, nameFor(names, m.GetBuddyKey())) + ": " + cleanText(m.GetText(), strings.Repeat(" ", 9))
 	case *pb.Event_PresenceChanged:
 		return at + "presence: " + presenceText(k.PresenceChanged)
+	case *pb.Event_BuddyPresence:
+		p := k.BuddyPresence
+		names[p.GetBuddy().GetIdentityKey()] = buddyName(p.GetBuddy())
+		line := at + s.paint(bold, buddyName(p.GetBuddy())) + " is " + presenceText(p.GetBuddy().GetPresence())
+		switch {
+		case p.GetDoorOpen():
+			line += " (signed on)"
+		case p.GetDoorClose():
+			line += " (" + clean(p.GetReason()) + ")"
+		}
+		return line
+	case *pb.Event_MessageUpdated:
+		u := k.MessageUpdated
+		return at + fmt.Sprintf("IM to %s %s (%s)", nameFor(names, u.GetBuddyKey()), deliveryName(u.GetDelivery()), clean(u.GetMsgId()))
 	}
 	return at + "unknown event"
 }

@@ -28,6 +28,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	pb "github.com/aghman/openaim/internal/apipb"
 )
@@ -498,8 +499,30 @@ func (m *Model) event(ev *pb.Event) {
 		}
 	case *pb.Event_PresenceChanged:
 		m.presence = k.PresenceChanged
+	case *pb.Event_BuddyPresence:
+		b := k.BuddyPresence.GetBuddy()
+		if _, ok := m.buddies[b.GetIdentityKey()]; ok {
+			m.buddies[b.GetIdentityKey()] = b
+		}
+	case *pb.Event_MessageUpdated:
+		m.updateMessage(k.MessageUpdated)
 	}
 	m.fixCursor()
+}
+
+// updateMessage applies a delivery change to a message we have.
+func (m *Model) updateMessage(u *pb.MessageUpdate) {
+	c, ok := m.convs[u.GetBuddyKey()]
+	if !ok {
+		return
+	}
+	i, ok := c.ids[u.GetMsgId()]
+	if !ok {
+		return
+	}
+	msg := proto.Clone(c.msgs[i]).(*pb.Message)
+	msg.Delivery, msg.AckedMask, msg.FragCount = u.GetDelivery(), u.GetAckedMask(), u.GetFragCount()
+	c.msgs[i] = msg
 }
 
 func (m *Model) removeBuddy(key string) {

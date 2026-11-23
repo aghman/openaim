@@ -52,6 +52,10 @@ func ev(kind any) *pb.Event {
 		e.Kind = k
 	case *pb.Event_PresenceChanged:
 		e.Kind = k
+	case *pb.Event_BuddyPresence:
+		e.Kind = k
+	case *pb.Event_MessageUpdated:
+		e.Kind = k
 	}
 	return e
 }
@@ -619,4 +623,30 @@ func (h *harness) selectBuddy(key string) {
 		h.keys("down")
 	}
 	h.t.Fatalf("can't select %s:\n%s", key, h.view())
+}
+
+// TestNetworkEvents: buddy_presence moves a buddy in the list, and
+// message_updated changes an IM's delivery mark.
+func TestNetworkEvents(t *testing.T) {
+	t.Parallel()
+	f := fourBuddies()
+	h := startUp(t, f)
+	dave := buddy("kdave000", "Dave", "Buddies", online, true)
+	f.push(ev(&pb.Event_BuddyPresence{BuddyPresence: &pb.BuddyPresence{Buddy: dave, From: offline, To: online, DoorOpen: true}}))
+	h.waitView("▾ Buddies (2/2)", "▾ Offline (1)")
+
+	h.keys("enter") // Alice
+	h.keys("hi", "enter")
+	h.waitView("[13:02] me: hi  [queued]")
+	id := h.m.convs["kalice00"].msgs[0].GetMsgId()
+	f.push(ev(&pb.Event_MessageUpdated{MessageUpdated: &pb.MessageUpdate{MsgId: id, BuddyKey: "kalice00",
+		Delivery: pb.DeliveryState_DELIVERY_STATE_SENT, FragCount: 1}}))
+	h.waitView("[13:02] me: hi  [sent]")
+	f.push(ev(&pb.Event_MessageUpdated{MessageUpdated: &pb.MessageUpdate{MsgId: id, BuddyKey: "kalice00",
+		Delivery: pb.DeliveryState_DELIVERY_STATE_ACKED, FragCount: 1, AckedMask: 1}}))
+	h.waitView("[13:02] me: hi  [delivered]")
+	// Updates for messages we don't have are ignored.
+	f.push(ev(&pb.Event_MessageUpdated{MessageUpdated: &pb.MessageUpdate{MsgId: "00000000000000ff", BuddyKey: "kbob0000"}}))
+	f.push(ev(&pb.Event_BuddyAdded{BuddyAdded: buddy("kzed0000", "Zed", "Buddies", online, true)})) // a marker
+	h.waitView("Zed")
 }
