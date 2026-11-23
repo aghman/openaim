@@ -38,7 +38,7 @@ func TestMigration0002KeepsData(t *testing.T) {
 	db.Close()
 
 	s := open(t, path)
-	if v, err := s.SchemaVersion(ctx); err != nil || v != 3 {
+	if v, err := s.SchemaVersion(ctx); err != nil || v != 4 {
 		t.Fatalf("schema version %d, %v", v, err)
 	}
 	if v, err := s.Meta(ctx, "identity_key"); err != nil || string(v) != "\x01\x02" {

@@ -199,10 +199,9 @@ func TestEveryRPC(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// An IM arrives from Bob (no transports yet: inject its frames). History
-	// orders both directions by store time, which has millisecond
-	// resolution; make sure the reply lands in a later millisecond.
-	time.Sleep(2 * time.Millisecond)
+	// An IM arrives from Bob (no transports yet: inject its frames), in the
+	// same millisecond as the send, likely as not. History orders both
+	// directions by insertion, so it still comes last.
 	for _, f := range sealFrom(t, bob, me.Public(), 1, "yeah if my radio reaches lol") {
 		if _, err := d.Node().HandleFrame(ctx, f); err != nil {
 			t.Fatal(err)

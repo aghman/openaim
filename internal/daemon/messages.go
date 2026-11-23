@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/aghman/openaim/internal/body"
@@ -31,8 +30,11 @@ type Message struct {
 	ReceivedAt time.Time      // incoming: when we delivered it
 	State      store.OutState // outgoing: delivery state
 	Seq        uint64
-
-	local time.Time // when it entered this daemon's store, for ordering
+	// Outgoing only: how often the router sent it, and which of its
+	// FragCount fragments the buddy acked.
+	Attempts  int
+	AckedMask uint16
+	FragCount int
 }
 
 // SendLayout is the layout IMs are sealed in. Mesh frames fit every route,
@@ -81,7 +83,7 @@ func (n *Node) SendIM(ctx context.Context, sel, text string) (Message, error) {
 		return Message{}, err
 	}
 	m := Message{MsgID: out.MsgID, Buddy: b.Key, Direction: Outgoing, Text: text,
-		SentAt: frame.TimeOf(frame.Timestamp(sentAt)), State: out.State, Seq: out.Seq, local: out.CreatedAt}
+		SentAt: frame.TimeOf(frame.Timestamp(sentAt)), State: out.State, Seq: out.Seq, FragCount: len(out.Frames)}
 	n.log.Debug("IM queued", "buddy", b.Key.KeyID(), "msg_id", out.MsgID, "frames", len(out.Frames))
 	n.events.publish(Event{Kind: EventMessageQueued, Message: &m})
 	return m, nil
@@ -111,11 +113,7 @@ func (n *Node) History(ctx context.Context, sel string, limit int) ([]Message, e
 	if err != nil {
 		return nil, err
 	}
-	in, err := n.store.History(ctx, b.ID, limit)
-	if err != nil {
-		return nil, err
-	}
-	out, err := n.store.SentHistory(ctx, b.ID, frame.IM, limit)
+	entries, err := n.store.Conversation(ctx, b.ID, frame.IM, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -125,33 +123,37 @@ func (n *Node) History(ctx context.Context, sel string, limit int) ([]Message, e
 	}
 	sendKey := frame.NewConvKey(p.Send)
 
-	msgs := make([]Message, 0, len(in)+len(out))
-	for _, m := range in {
-		if m.Inner.Type != frame.IM {
+	// Entries come in the order they entered the store (a counter shared
+	// by both directions), so the order is total and stable.
+	msgs := make([]Message, 0, len(entries))
+	for _, e := range entries {
+		if m := e.In; m != nil {
+			msgs = append(msgs, incomingMessage(b.Key, m.MsgID, m.Inner, m.ReceivedAt))
 			continue
 		}
-		msgs = append(msgs, incomingMessage(b.Key, m.MsgID, m.Inner, m.ReceivedAt))
-	}
-	for _, o := range out {
+		o := e.Out
 		inner, err := openSealed(sendKey, o.Frames)
 		if err != nil {
 			// Our own frames failing to open means local corruption.
 			n.log.Error("can't read back a sent message", "buddy", b.Key.KeyID(), "msg_id", o.MsgID, "err", err)
 			continue
 		}
-		msgs = append(msgs, Message{MsgID: o.MsgID, Buddy: b.Key, Direction: Outgoing, Text: string(inner.Body),
-			SentAt: frame.TimeOf(inner.Time), State: o.State, Seq: inner.Seq, local: o.CreatedAt})
-	}
-	sort.SliceStable(msgs, func(i, j int) bool { return msgs[i].local.Before(msgs[j].local) })
-	if len(msgs) > limit {
-		msgs = msgs[len(msgs)-limit:]
+		msgs = append(msgs, outgoingMessage(b.Key, o, inner))
 	}
 	return msgs, nil
 }
 
 func incomingMessage(k identity.PublicKey, id frame.MsgID, in frame.Inner, at time.Time) Message {
 	return Message{MsgID: id, Buddy: k, Direction: Incoming, Text: string(in.Body),
-		SentAt: frame.TimeOf(in.Time), ReceivedAt: at, Seq: in.Seq, local: at}
+		SentAt: frame.TimeOf(in.Time), ReceivedAt: at, Seq: in.Seq}
+}
+
+// outgoingMessage is a message we sealed, from its outbox entry and opened
+// inner payload.
+func outgoingMessage(k identity.PublicKey, o *store.Outgoing, inner frame.Inner) Message {
+	return Message{MsgID: o.MsgID, Buddy: k, Direction: Outgoing, Text: string(inner.Body),
+		SentAt: frame.TimeOf(inner.Time), State: o.State, Seq: inner.Seq,
+		Attempts: o.Attempts, AckedMask: o.AckedMask, FragCount: len(o.Frames)}
 }
 
 // openSealed decrypts a message we sealed, from its stored frames.

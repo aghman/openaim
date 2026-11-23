@@ -58,7 +58,7 @@ func sealIM(k frame.ConvKey, body string) SealFunc {
 func TestMigrationsAndReopen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "openaim.db")
 	s := open(t, path)
-	if v, err := s.SchemaVersion(ctx); err != nil || v != 3 {
+	if v, err := s.SchemaVersion(ctx); err != nil || v != 4 {
 		t.Fatalf("schema version %d, %v", v, err)
 	}
 	if err := s.SetMeta(ctx, "identity", []byte{1, 2}); err != nil {
