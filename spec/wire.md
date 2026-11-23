@@ -340,6 +340,9 @@ Each of these was decided while writing this spec and implementing `internal/fra
     it's `issued_at`, uint32 seconds since the OpenAIM epoch, big-endian, as the `ROTATE` body already had it. This draft also rejects
     `new = −old` and a recovery key that shares an X25519 form with `old`, `new` or the identity key, and fixes freshness: at most
     10 minutes ahead, no maximum age, and `issued_at` increasing per buddy.
+15. **The accept handshake is specified** (§11.6). Design §5.4 says accepting sends the presence key and reachability but not how the
+    requester's presence key gets back, or what crossed requests do. Here the requester answers a `BUDDY_ACCEPT` once with its own,
+    and crossed requests count as mutual acceptance. These are the only messages sent without a user action, and only to keys the user added.
 
 ## 10. Open questions
 
@@ -539,6 +542,21 @@ The inner payload has the §6 format.
 | IP | **3983 B** | every field at its limit, with four IP hints: 770 B |
 
 `TestFirstContactBudgets` in `internal/body` checks these.
+
+**The accept handshake.** A request is answered only by the user, never automatically. Accepting sends one `BUDDY_ACCEPT` in a
+`DATA` frame under the new pairwise keys (§4.3). It carries the accepter's presence key, recovery key, REACH and CAPS. Two exchanges
+happen without a further user action. Both apply only to a key the user chose to add, so neither answers a stranger:
+
+1. **The requester replies once.** When a `pending_out` buddy's `BUDDY_ACCEPT` arrives, the requester stores it, marks the buddy
+   accepted and sends its own `BUDDY_ACCEPT` back once. This is how the accepter learns the requester's presence key, which a
+   `BUDDY_REQUEST` doesn't carry. It also delivers a recovery key the requester left out of a mesh request to save bytes.
+   A `BUDDY_ACCEPT` from an already-accepted buddy updates their presence key and REACH, and isn't answered again.
+2. **Crossed requests are mutual acceptance.** If a `BUDDY_REQUEST` arrives from a key the user has already requested
+   (`pending_out`), or the user adds a key whose request is waiting (`pending_in`), both sides have asked. The buddy becomes accepted
+   and `BUDDY_ACCEPT` is sent.
+
+Nothing about the user's presence or reachability goes to a requester before acceptance. Until then the requester's `DATA` frames
+are unknown to the keyring and are dropped (§7 step 2).
 
 ### 11.7 Properties and limitations
 
