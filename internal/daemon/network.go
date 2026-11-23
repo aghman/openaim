@@ -71,6 +71,9 @@ const (
 	lookupSpacing = 5 * time.Second
 	// oneOffTimeout bounds a best-effort send.
 	oneOffTimeout = 30 * time.Second
+	// signOffFlush is how long shutdown waits after signing off before
+	// closing the transports, so the OFFLINE presence gets out.
+	signOffFlush = 300 * time.Millisecond
 )
 
 // NetworkOptions configures the IP transport. Zero values mean the
@@ -337,8 +340,20 @@ func (n *Node) startNetwork(ctx context.Context, o NetworkOptions) (err error) {
 func (s *netState) close() {
 	if s.pres != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), s.o.SignOffTimeout)
+		sent := s.pres.Stats().Sent
 		if err := s.pres.SignOff(ctx); err != nil && !errors.Is(err, presence.ErrClosed) {
 			s.log.Warn("signing off", "err", err)
+		}
+		if s.pres.Stats().Sent > sent {
+			// A Send returns once the frames are in the stream's buffer;
+			// closing the host at once can drop them on the way out.
+			// Give the OFFLINE presence a moment to leave.
+			t := time.NewTimer(signOffFlush)
+			select {
+			case <-t.C:
+			case <-ctx.Done():
+			}
+			t.Stop()
 		}
 		cancel()
 		s.pres.Close()
