@@ -39,6 +39,9 @@ type HostOptions struct {
 	// Gater, if set, can veto connections (tests and the spike use it to
 	// force traffic onto a relay).
 	Gater connmgr.ConnectionGater
+	// Resolver, if set, resolves /dns* addresses instead of the system
+	// resolver (tests map a relay's name to loopback with it).
+	Resolver network.MultiaddrDNSResolver
 }
 
 // DefaultListen returns TCP and QUIC listen addresses on all IPv4 and IPv6
@@ -87,6 +90,9 @@ func NewHost(o HostOptions) (host.Host, error) {
 	}
 	if o.Gater != nil {
 		opts = append(opts, libp2p.ConnectionGater(o.Gater))
+	}
+	if o.Resolver != nil {
+		opts = append(opts, libp2p.MultiaddrResolver(o.Resolver))
 	}
 	return libp2p.New(opts...)
 }
