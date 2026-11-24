@@ -29,6 +29,7 @@ type txRecord struct {
 	Channel   uint32       `json:"channel"`
 	Size      int          `json:"size"`
 	WantAck   bool         `json:"want_ack"`
+	HopLimit  uint32       `json:"hop_limit"` // as requested; 0 = radio.hop_limit
 	QueuedMS  *float64     `json:"queued_ms,omitempty"`
 	QueueRes  *int32       `json:"queue_res,omitempty"`
 	Ack       string       `json:"ack"`
@@ -50,7 +51,7 @@ func runSend(ctx context.Context, args []string) error {
 	count := fs.Int("count", 3, fmt.Sprintf("packets to send (max %d)", maxCount))
 	interval := fs.Duration("interval", 30*time.Second, fmt.Sprintf("time between sends (min %v)", minInterval))
 	wantAck := fs.Bool("want-ack", true, "set want_ack (firmware retries; DMs get a destination ack)")
-	hopLimit := fs.Uint("hop-limit", 0, "hop limit (0 = radio default)")
+	hopLimit := hopLimitFlag(fs, "the test packets")
 	ackTimeout := fs.Duration("ack-timeout", 90*time.Second, "how long to wait for an ack/echo per packet")
 	expectEcho := fs.Bool("expect-echo", false, "wait for an echo from a 'meshspike listen --echo' peer and report round-trip time")
 	logs := fs.Bool("logs", false, "print firmware log lines")
@@ -65,6 +66,9 @@ func runSend(ctx context.Context, args []string) error {
 		return err
 	}
 	if err := checkPortNum(*portnum); err != nil {
+		return err
+	}
+	if err := checkHopLimit(*hopLimit); err != nil {
 		return err
 	}
 	if *size < minPayload || *size > int(pb.Constants_DATA_PAYLOAD_LEN) {
@@ -145,7 +149,7 @@ func runSend(ctx context.Context, args []string) error {
 		c.Forget(p)
 		echoes.forget(seq)
 
-		r := toRecord(p.Result(), seq, dest, uint32(*channel), *size, *wantAck, echoAt, rc)
+		r := toRecord(p.Result(), seq, dest, uint32(*channel), *size, *wantAck, uint32(*hopLimit), echoAt, rc)
 		results = append(results, r)
 		rec.write(r)
 		fmt.Println(formatTx(r))
@@ -161,10 +165,10 @@ func runSend(ctx context.Context, args []string) error {
 	return nil
 }
 
-func toRecord(res mesh.Result, seq, dest, channel uint32, size int, wantAck bool, echoAt time.Time, rc radioContext) txRecord {
+func toRecord(res mesh.Result, seq, dest, channel uint32, size int, wantAck bool, hopLimit uint32, echoAt time.Time, rc radioContext) txRecord {
 	r := txRecord{
 		Kind: "tx", At: res.SentAt, Seq: seq, ID: fmt.Sprintf("%08x", res.ID), To: nodeID(dest),
-		Channel: channel, Size: size, WantAck: wantAck, Ack: res.Ack.String(), Radio: rc,
+		Channel: channel, Size: size, WantAck: wantAck, HopLimit: hopLimit, Ack: res.Ack.String(), Radio: rc,
 	}
 	if !res.QueuedAt.IsZero() {
 		q, qr := ms(res.QueuedAt.Sub(res.SentAt)), res.QueueRes

@@ -38,12 +38,16 @@ go build -o bin/ ./cmd/...
   - MQTT-uplinked channels
   - relay-blocking rebroadcast modes
 - **Keep runs small.** `send` enforces at least 5 s between packets and at most 100 packets. A 200 B LongFast frame is about 2 s of airtime before relays, and EU868 duty-cycle limits can be as low as 1%.
+- **Keep hop limits low.** `send`, `probe-size` and `listen --echo` take `--hop-limit N` (1–7). The default, 0, uses
+  the radio's configured limit, which on a radio set up for a wide public mesh can be 6 or 7. Each extra hop means more
+  nodes rebroadcast your test traffic. Use the smallest limit that reaches B: `--hop-limit 1` when A and B can hear each other.
 
 ## Experiments
 
 You need two radios, **A** and **B**, on firmware 2.6 or later (2.8.x matches the pinned protobufs). Run
-`listen --echo` on B, on its own machine or a second USB port, and the commands below on A. Add `--jsonl
-run.jsonl` to any command to keep raw records.
+`listen --echo --hop-limit H` on B, on its own machine or a second USB port, and the commands below on A, adding
+`--hop-limit H` to each one that transmits (see [Before transmitting](#before-transmitting)). Add `--jsonl
+run.jsonl` to any command to keep raw records. They include the hop limit asked for and the radio's own.
 
 | # | Question (design ref) | Command on A | Record |
 |---|----------------------|--------------|--------|
@@ -55,7 +59,7 @@ run.jsonl` to any command to keep raw records.
 | E6 | Broadcast `want_ack` (§8.8) | `meshspike send --to broadcast --size 200 --count 5 --want-ack --channel N` | Whether acks are `implicit-ack` (a neighbour's rebroadcast was overheard) or nothing when no neighbour is in range |
 | E7 | Unreachable DM | Power B off, then repeat E5 with `--count 3` | Time to `MAX_RETRANSMIT` NAK, i.e. how long the firmware keeps retrying |
 | E8 | Relaying through restrictive nodes (§6.2) | Put a third radio C between A and B in `CORE_PORTNUMS_ONLY`, then `LOCAL_ONLY`; repeat E5 | Delivered or not, per mode |
-| E9 | Distance and hops | Repeat E5 at 1, 2 and 3 hops | Hops, SNR and latency from the `rx` and `tx` lines |
+| E9 | Distance and hops | Repeat E5 at 1, 2 and 3 hops, with `--hop-limit` on A and on B's `listen --echo` at least the hop count | Hops, SNR and latency from the `rx` and `tx` lines |
 
 ## Results
 

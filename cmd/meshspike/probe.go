@@ -25,14 +25,15 @@ func (o outcome) String() string {
 }
 
 type probeStep struct {
-	Kind    string       `json:"kind"` // "probe"
-	At      time.Time    `json:"at"`
-	To      string       `json:"to"`
-	Channel uint32       `json:"channel"`
-	Size    int          `json:"size"`
-	Outcome string       `json:"outcome"`
-	Detail  string       `json:"detail,omitempty"`
-	Radio   radioContext `json:"radio"`
+	Kind     string       `json:"kind"` // "probe"
+	At       time.Time    `json:"at"`
+	To       string       `json:"to"`
+	Channel  uint32       `json:"channel"`
+	Size     int          `json:"size"`
+	HopLimit uint32       `json:"hop_limit"` // as requested; 0 = radio.hop_limit
+	Outcome  string       `json:"outcome"`
+	Detail   string       `json:"detail,omitempty"`
+	Radio    radioContext `json:"radio"`
 }
 
 // errNoAnswer means the radio neither queued nor refused a probe.
@@ -68,8 +69,8 @@ func searchMaxPayload(ctx context.Context, lo, hi int, try func(ctx context.Cont
 // transmission and no retries) and classifies the radio's reaction.
 // settle bounds the wait for any verdict; grace is how long to keep listening
 // for a late NAK after the radio has queued the probe.
-func probeOnce(ctx context.Context, c *mesh.Client, dest, channel uint32, portnum pb.PortNum, size int, settle, grace time.Duration) (outcome, string, error) {
-	p, err := c.Send(mesh.SendRequest{To: dest, Channel: channel, PortNum: portnum, Payload: encodePayload(0, size, time.Now())})
+func probeOnce(ctx context.Context, c *mesh.Client, dest, channel uint32, portnum pb.PortNum, size int, hopLimit uint32, settle, grace time.Duration) (outcome, string, error) {
+	p, err := c.Send(mesh.SendRequest{To: dest, Channel: channel, PortNum: portnum, Payload: encodePayload(0, size, time.Now()), HopLimit: hopLimit})
 	if err != nil {
 		return 0, "", err
 	}
@@ -118,6 +119,7 @@ func runProbe(ctx context.Context, args []string) error {
 	hi := fs.Int("max", int(pb.Constants_DATA_PAYLOAD_LEN), "largest size to consider")
 	interval := fs.Duration("interval", 15*time.Second, fmt.Sprintf("wait after each probe that went on air (min %v)", minInterval))
 	settle := fs.Duration("settle", 10*time.Second, "how long to wait for the radio's verdict on each probe")
+	hopLimit := hopLimitFlag(fs, "the probes")
 	grace := fs.Duration("nak-grace", 2*time.Second, "after a probe is queued, how long to keep waiting for a late TOO_LARGE")
 	jsonl := fs.String("jsonl", "", "append probe records to this JSONL file")
 	fs.Parse(args)
@@ -130,6 +132,9 @@ func runProbe(ctx context.Context, args []string) error {
 		return err
 	}
 	if err := checkPortNum(*portnum); err != nil {
+		return err
+	}
+	if err := checkHopLimit(*hopLimit); err != nil {
 		return err
 	}
 	if *lo < minPayload || *hi > int(pb.Constants_DATA_PAYLOAD_LEN) || *lo > *hi {
@@ -166,14 +171,14 @@ func runProbe(ctx context.Context, args []string) error {
 			route = "DM (no public key known: channel encryption)"
 		}
 	}
-	fmt.Fprintf(os.Stderr, "probing %s to %s on channel %d, sizes %d–%d (each accepted probe transmits once)\n", route, nodeID(dest), *channel, *lo, *hi)
+	fmt.Fprintf(os.Stderr, "probing %s to %s on channel %d, hop limit %s, sizes %d–%d (each accepted probe transmits once)\n", route, nodeID(dest), *channel, hopsLabel(*hopLimit, &s), *lo, *hi)
 
 	try := func(ctx context.Context, size int) (outcome, string, error) {
-		o, detail, err := probeOnce(ctx, c, dest, uint32(*channel), pb.PortNum(*portnum), size, *settle, *grace)
+		o, detail, err := probeOnce(ctx, c, dest, uint32(*channel), pb.PortNum(*portnum), size, uint32(*hopLimit), *settle, *grace)
 		if err != nil {
 			return o, detail, err
 		}
-		step := probeStep{Kind: "probe", At: time.Now(), To: nodeID(dest), Channel: uint32(*channel), Size: size, Outcome: o.String(), Detail: detail, Radio: rc}
+		step := probeStep{Kind: "probe", At: time.Now(), To: nodeID(dest), Channel: uint32(*channel), Size: size, HopLimit: uint32(*hopLimit), Outcome: o.String(), Detail: detail, Radio: rc}
 		rec.write(step)
 		fmt.Printf("probe %3dB → %s %s\n", size, o, detail)
 		if o == accepted {

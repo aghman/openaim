@@ -115,4 +115,5 @@ type radioContext struct {
 	Region      string `json:"region"`
 	Preset      string `json:"preset"`
 	Rebroadcast string `json:"rebroadcast"`
+	HopLimit    uint32 `json:"hop_limit"` // the radio's configured limit, used when a packet asks for 0
 }

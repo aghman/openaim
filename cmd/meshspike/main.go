@@ -5,9 +5,9 @@
 //
 //	meshspike ports
 //	meshspike info       [--port DEV | --tcp HOST]
-//	meshspike listen     [--port DEV | --tcp HOST] [--echo] [--all] [--logs] [--jsonl FILE]
-//	meshspike send       [--port DEV | --tcp HOST] --to NODE [--size N] [--count N] [--interval D] [--want-ack] [--jsonl FILE]
-//	meshspike probe-size [--port DEV | --tcp HOST] --to NODE [--min N] [--max N] [--interval D] [--jsonl FILE]
+//	meshspike listen     [--port DEV | --tcp HOST] [--echo] [--hop-limit N] [--all] [--logs] [--jsonl FILE]
+//	meshspike send       [--port DEV | --tcp HOST] --to NODE [--size N] [--count N] [--interval D] [--want-ack] [--hop-limit N] [--jsonl FILE]
+//	meshspike probe-size [--port DEV | --tcp HOST] --to NODE [--min N] [--max N] [--interval D] [--hop-limit N] [--jsonl FILE]
 //
 // NODE is "broadcast", "!a1b2c3d4" (hex node ID) or a decimal node number.
 package main
@@ -221,6 +221,33 @@ func checkPortNum(p int) error {
 		return fmt.Errorf("--portnum %d is outside the private range 256–511", p)
 	}
 	return nil
+}
+
+// maxHopLimit is the firmware's HOP_MAX.
+const maxHopLimit = 7
+
+// hopLimitFlag registers --hop-limit; what names the packets it applies to.
+// The client API can't ask for zero relays: 0 means the radio's own limit.
+func hopLimitFlag(fs *flag.FlagSet, what string) *uint {
+	return fs.Uint("hop-limit", 0, fmt.Sprintf("hop limit for %s (0 = the radio's configured limit; max %d)", what, maxHopLimit))
+}
+
+func checkHopLimit(h uint) error {
+	if h > maxHopLimit {
+		return fmt.Errorf("--hop-limit %d is over the firmware maximum of %d", h, maxHopLimit)
+	}
+	return nil
+}
+
+// hopsLabel describes the hop limit packets will leave with.
+func hopsLabel(h uint, s *mesh.Snapshot) string {
+	if h != 0 {
+		return strconv.FormatUint(uint64(h), 10)
+	}
+	if d := s.LoRa().GetHopLimit(); d != 0 {
+		return fmt.Sprintf("%d (radio default)", d)
+	}
+	return "radio default"
 }
 
 func ms(d time.Duration) float64 { return float64(d.Microseconds()) / 1000 }

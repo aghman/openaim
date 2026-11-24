@@ -42,10 +42,14 @@ func runListen(ctx context.Context, args []string) error {
 	portnum := portNumFlag(fs)
 	all := fs.Bool("all", false, "show packets on every PortNum, not just --portnum")
 	echo := fs.Bool("echo", false, "reply to meshspike test DMs addressed to this node (never to broadcasts)")
+	hopLimit := hopLimitFlag(fs, "--echo replies")
 	logs := fs.Bool("logs", false, "print firmware log lines")
 	jsonl := fs.String("jsonl", "", "append received-packet records to this JSONL file")
 	fs.Parse(args)
 	if err := checkPortNum(*portnum); err != nil {
+		return err
+	}
+	if err := checkHopLimit(*hopLimit); err != nil {
 		return err
 	}
 
@@ -63,7 +67,11 @@ func runListen(ctx context.Context, args []string) error {
 	s := c.Snapshot()
 	rc := contextOf(&s)
 	me := s.MyNodeNum()
-	fmt.Fprintf(os.Stderr, "listening as %s on PortNum %d (Ctrl-C to stop)\n", nodeID(me), *portnum)
+	if *echo {
+		fmt.Fprintf(os.Stderr, "listening as %s on PortNum %d, echoing with hop limit %s (Ctrl-C to stop)\n", nodeID(me), *portnum, hopsLabel(*hopLimit, &s))
+	} else {
+		fmt.Fprintf(os.Stderr, "listening as %s on PortNum %d (Ctrl-C to stop)\n", nodeID(me), *portnum)
+	}
 
 	var lastEcho time.Time
 	for {
@@ -107,9 +115,7 @@ func runListen(ctx context.Context, args []string) error {
 						// Echo only direct requests, never broadcasts or echoes.
 						if *echo && !tp.Echo && p.GetTo() == me && time.Since(lastEcho) >= echoMinGap {
 							lastEcho = time.Now()
-							if _, err := c.Send(mesh.SendRequest{
-								To: p.GetFrom(), Channel: p.GetChannel(), PortNum: pb.PortNum(*portnum), Payload: echoOf(d.GetPayload()),
-							}); err != nil {
+							if _, err := c.Send(echoReply(p, uint32(*hopLimit))); err != nil {
 								line += " echo-failed: " + err.Error()
 							} else {
 								line += " → echoed"
@@ -121,6 +127,15 @@ func runListen(ctx context.Context, args []string) error {
 				rec.write(r)
 			}
 		}
+	}
+}
+
+// echoReply answers a meshspike test DM: back to its sender on the same
+// channel and PortNum, with the given hop limit (0 = the radio's).
+func echoReply(p *pb.MeshPacket, hopLimit uint32) mesh.SendRequest {
+	d := p.GetDecoded()
+	return mesh.SendRequest{
+		To: p.GetFrom(), Channel: p.GetChannel(), PortNum: d.GetPortnum(), Payload: echoOf(d.GetPayload()), HopLimit: hopLimit,
 	}
 }
 
@@ -150,5 +165,6 @@ func contextOf(s *mesh.Snapshot) radioContext {
 		Region:      s.LoRa().GetRegion().String(),
 		Preset:      s.LoRa().GetModemPreset().String(),
 		Rebroadcast: s.Device().GetRebroadcastMode().String(),
+		HopLimit:    s.LoRa().GetHopLimit(),
 	}
 }

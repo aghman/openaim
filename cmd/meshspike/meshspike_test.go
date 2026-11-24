@@ -91,10 +91,70 @@ func TestProbeAgainstFakeRadio(t *testing.T) {
 		want int
 	}{{mesh.BroadcastAddr, 233}, {r.Peers[0], 221}} {
 		got, err := searchMaxPayload(ctx, 150, 233, func(ctx context.Context, size int) (outcome, string, error) {
-			return probeOnce(ctx, c, tc.dest, 0, pb.PortNum_PRIVATE_APP, size, time.Second, 20*time.Millisecond)
+			return probeOnce(ctx, c, tc.dest, 0, pb.PortNum_PRIVATE_APP, size, 0, time.Second, 20*time.Millisecond)
 		})
 		if err != nil || got != tc.want {
 			t.Errorf("%s: got %d, %v; want %d", nodeID(tc.dest), got, err, tc.want)
+		}
+	}
+}
+
+// TestProbeHopLimit checks that probe-size's --hop-limit reaches the radio,
+// and that 0 leaves the choice to the radio.
+func TestProbeHopLimit(t *testing.T) {
+	r := meshtest.New()
+	c := mesh.NewClient(r.Start())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := c.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	go func() {
+		for range c.Events() {
+		}
+	}()
+
+	for _, hops := range []uint32{2, 0} {
+		if _, _, err := probeOnce(ctx, c, mesh.BroadcastAddr, 0, pb.PortNum_PRIVATE_APP, 150, hops, time.Second, 20*time.Millisecond); err != nil {
+			t.Fatal(err)
+		}
+		sent := r.Sent()
+		if got := sent[len(sent)-1].GetHopLimit(); got != hops {
+			t.Errorf("--hop-limit %d: radio got hop_limit %d", hops, got)
+		}
+	}
+
+	s := c.Snapshot()
+	for h, want := range map[uint]string{2: "2", 0: "3 (radio default)"} {
+		if got := hopsLabel(h, &s); got != want {
+			t.Errorf("hopsLabel(%d) = %q, want %q", h, got, want)
+		}
+	}
+}
+
+func TestEchoReply(t *testing.T) {
+	req := &pb.MeshPacket{
+		From: 0x11111111, To: 0x0a0b0c0d, Channel: 1,
+		PayloadVariant: &pb.MeshPacket_Decoded{Decoded: &pb.Data{
+			Portnum: pb.PortNum_PRIVATE_APP, Payload: encodePayload(9, 200, time.Now()),
+		}},
+	}
+	for _, hops := range []uint32{0, 3} {
+		r := echoReply(req, hops)
+		if r.To != 0x11111111 || r.Channel != 1 || r.PortNum != pb.PortNum_PRIVATE_APP || r.HopLimit != hops || r.WantAck {
+			t.Errorf("hops %d: got %+v", hops, r)
+		}
+		if tp, err := decodePayload(r.Payload); err != nil || !tp.Echo || tp.Seq != 9 {
+			t.Errorf("hops %d: payload %+v, %v", hops, tp, err)
+		}
+	}
+}
+
+func TestCheckHopLimit(t *testing.T) {
+	for h, ok := range map[uint]bool{0: true, 1: true, 7: true, 8: false} {
+		if err := checkHopLimit(h); (err == nil) != ok {
+			t.Errorf("checkHopLimit(%d) = %v", h, err)
 		}
 	}
 }
